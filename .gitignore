@@ -1,0 +1,6 @@
+.omx/
+*.env
+!.env.example
+.DS_Store
+*.swp
+*.swo
