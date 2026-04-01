@@ -19,10 +19,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$SCRIPT_DIR/lib/orch-agent-runtime.sh"
+orch_resolve_paths "$SCRIPT_DIR"
+PROJECT_ROOT="$ORCH_PROJECT_ROOT"
 TMUX_SESSION=""  # Auto-detected from current session or --session flag
 CODEX_MODEL="${CODEX_MODEL:-}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-}"
+DOC_POLL_INTERVAL="$(orch_default_poll_interval doc)"
 
 # =============================================================================
 # Argument Parsing
@@ -139,67 +142,24 @@ ensure_tmux_session() {
 
 dispatch_in_window() {
     local window_name="$1"
-    local script_file="$2"
+    local agent="$2"
+    local prompt_file="$3"
+    local exit_file="/tmp/phase${PHASE_NUM}-${window_name}.exit"
 
     ensure_tmux_session
 
-    # Kill existing window if present (re-dispatch)
-    tmux kill-window -t "${TMUX_SESSION}:${window_name}" 2>/dev/null || true
-
-    # Remove stale exit file
-    rm -f "/tmp/phase${PHASE_NUM}-${window_name}.exit"
-
-    # Launch
-    tmux new-window -t "$TMUX_SESSION" -n "$window_name" "bash $script_file"
-    log "Dispatched in tmux window '${TMUX_SESSION}:${window_name}'"
-    log "Exit file: /tmp/phase${PHASE_NUM}-${window_name}.exit"
+    orch_dispatch_tmux_window "$TMUX_SESSION" "$window_name" "$agent" "$prompt_file" "$PROJECT_ROOT" "$exit_file"
+    log "Dispatched $agent in tmux window '${TMUX_SESSION}:${window_name}'"
+    log "Exit file: $exit_file"
     log "Monitor:   tmux capture-pane -t ${TMUX_SESSION}:${window_name} -p | tail -20"
 }
 
-# Write the dispatch script with prompt stored in a separate file to avoid
-# shell interpolation mangling dollar signs, backticks, and single quotes.
-write_script() {
+write_prompt() {
     local name="$1"
     local prompt="$2"
-    local agent="${3:-claude}"
-    local script_file="/tmp/phase${PHASE_NUM}-${name}.sh"
     local prompt_file="/tmp/phase${PHASE_NUM}-${name}.prompt"
-    local exit_file="/tmp/phase${PHASE_NUM}-${name}.exit"
-
-    # Write prompt to a separate file using printf to avoid shell interpolation.
-    # This prevents dollar signs, backticks, and single quotes in the prompt
-    # from being mangled by the heredoc that generates the dispatch script.
-    printf '%s' "$prompt" > "$prompt_file"
-
-    if [[ "$agent" == "codex" ]]; then
-        cat > "$script_file" <<SCRIPT
-#!/bin/bash
-cd "${PROJECT_ROOT}"
-PROMPT_CONTENT="\$(cat ${prompt_file})"
-codex exec "\$PROMPT_CONTENT" --full-auto ${CODEX_MODEL:+-m "${CODEX_MODEL}"}
-EXIT_CODE=\$?
-echo \$EXIT_CODE > "${exit_file}"
-if [[ \$EXIT_CODE -ne 0 ]]; then
-    echo "[error-recovery] Agent exited with code \$EXIT_CODE at \$(date '+%H:%M:%S')"
-    echo "[error-recovery] Prompt file: ${prompt_file}"
-fi
-SCRIPT
-    else
-        cat > "$script_file" <<SCRIPT
-#!/bin/bash
-cd "${PROJECT_ROOT}"
-claude -p "\$(cat ${prompt_file})" --dangerously-skip-permissions ${CLAUDE_MODEL:+--model "${CLAUDE_MODEL}"}
-EXIT_CODE=\$?
-echo \$EXIT_CODE > "${exit_file}"
-if [[ \$EXIT_CODE -ne 0 ]]; then
-    echo "[error-recovery] Agent exited with code \$EXIT_CODE at \$(date '+%H:%M:%S')"
-    echo "[error-recovery] Prompt file: ${prompt_file}"
-fi
-SCRIPT
-    fi
-
-    chmod +x "$script_file"
-    echo "$script_file"
+    orch_write_prompt_file "$prompt_file" "$prompt"
+    echo "$prompt_file"
 }
 
 # Build a context preamble that workers should read
@@ -224,7 +184,8 @@ build_agent_bootstrap() {
 
     bootstrap+="## Agent Bootstrap Context\n"
     bootstrap+="- **Project root**: ${PROJECT_ROOT}\n"
-    bootstrap+="- **Guidelines**: Read \`.claude/CLAUDE.md\` for project conventions\n"
+    bootstrap+="- **Suite layout**: \`${ORCH_SUITE_LAYOUT}\`\n"
+    bootstrap+="- **Guidelines**: Read \`AGENTS.md\` and \`.claude/CLAUDE.md\` when present\n"
     bootstrap+="- **Git remote**: \`${GIT_REMOTE}\` (NOT origin)\n"
     bootstrap+="- **Git branch**: \`${GIT_BRANCH}\`\n"
 
@@ -390,13 +351,14 @@ INSTRUCTIONS:
 3. Write the complete Phase ${PHASE_NUM} document to: ${OUTPUT_FILE}
 4. The document must be comprehensive and production-ready -- no placeholders, no TODOs for core content.
 5. Follow all formatting conventions from prior phases.
-6. Commit using: git add <files> && git commit -m '<files-changed> -- <description>' && git push ${GIT_REMOTE} ${GIT_BRANCH}
+6. Commit using: git add <files> && git commit -m '<files-changed> -- <description>'
+   - Do NOT push unless the operator explicitly asks.
    - One phase-step per commit; do not batch across phases/rounds.
-7. When complete, ensure the file is saved, committed, pushed, and exit."
+7. When complete, ensure the file is saved, committed locally, and exit."
 
-    local script_file
-    script_file="$(write_script "draft" "$prompt" "claude")"
-    dispatch_in_window "draft" "$script_file"
+    local prompt_file
+    prompt_file="$(write_prompt "draft" "$prompt")"
+    dispatch_in_window "draft" "claude" "$prompt_file"
     write_state_json "$PHASE_NUM" "draft"
 }
 
@@ -459,9 +421,9 @@ If a section has no items, omit it. Verdict is PASS only if MUST FIX is empty."
     fi
 
     local window_name="review-r${ROUND}"
-    local script_file
-    script_file="$(write_script "$window_name" "$prompt" "$REVIEWER")"
-    dispatch_in_window "$window_name" "$script_file"
+    local prompt_file
+    prompt_file="$(write_prompt "$window_name" "$prompt")"
+    dispatch_in_window "$window_name" "$REVIEWER" "$prompt_file"
     write_state_json "$PHASE_NUM" "review-r${ROUND}"
 
     log "Review will be written to: $review_output"
@@ -489,16 +451,17 @@ INSTRUCTIONS:
 4. Implement items in SHOULD FIX where they improve quality.
 5. Update the draft IN PLACE at: ${DRAFT_FILE}
 6. Do NOT remove or restructure content that was not flagged in the review.
-7. Commit using: git add <files> && git commit -m '<files-changed> -- <description>' && git push ${GIT_REMOTE} ${GIT_BRANCH}
+7. Commit using: git add <files> && git commit -m '<files-changed> -- <description>'
+   - Do NOT push unless the operator explicitly asks.
    - One phase-step per commit; do not batch across phases/rounds.
-8. When complete, ensure the file is saved, committed, pushed, and exit.
+8. When complete, ensure the file is saved, committed locally, and exit.
 
 IMPORTANT: You are updating an existing document. Preserve all content that is not flagged for changes."
 
     local window_name="implement-r${ROUND}"
-    local script_file
-    script_file="$(write_script "$window_name" "$prompt" "claude")"
-    dispatch_in_window "$window_name" "$script_file"
+    local prompt_file
+    prompt_file="$(write_prompt "$window_name" "$prompt")"
+    dispatch_in_window "$window_name" "claude" "$prompt_file"
     write_state_json "$PHASE_NUM" "implement-r${ROUND}"
 }
 
