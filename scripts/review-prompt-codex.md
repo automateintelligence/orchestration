@@ -6,7 +6,7 @@ You are performing a code review of branch `{BRANCH}`.
 ## Review Scope
 - Plan: `{PLAN_FILE}`
 - Spec: `{SPECS}/spec.md`
-- Compare: `git diff main..{BRANCH}`
+- Compare: `git diff {COMPARE_RANGE}`
 
 ## Rules
 1. ONLY report items that require action. Do NOT comment on things that are fine.

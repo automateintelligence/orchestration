@@ -449,6 +449,7 @@ build_impl_prompt() {
     local task_desc="$2"
     local agent="$3"
     local work_dir="${4:-$PROJECT_ROOT}"
+    local work_branch="${5:-$BRANCH}"
 
     # Prepend bootstrap context
     build_agent_bootstrap "$work_dir"
