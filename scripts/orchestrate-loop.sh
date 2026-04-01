@@ -46,6 +46,7 @@ set -euo pipefail
 
 # --- Constants ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/orch-agent-runtime.sh
 source "$SCRIPT_DIR/lib/orch-agent-runtime.sh"
 orch_resolve_paths "$SCRIPT_DIR"
 PROJECT_ROOT="$ORCH_PROJECT_ROOT"
@@ -132,7 +133,10 @@ mkdir -p "$REVIEWS_DIR" "$STATE_DIR"
 
 # Source environment if specified
 if [[ -n "$ENV_FILE" && -f "$ENV_FILE" ]]; then
-    set -a; source "$ENV_FILE"; set +a
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
 fi
 
 # =============================================================================
@@ -206,6 +210,7 @@ EOF
 
 load_state() {
     if [[ -f "$STATE_FILE" ]]; then
+        # shellcheck disable=SC1090
         source "$STATE_FILE"
         log "  Resumed from state: processed=$TASKS_PROCESSED passed=$TASKS_PASSED failed=$TASKS_FAILED"
         return 0
@@ -265,12 +270,9 @@ parse_tasks() {
     local current_phase=""
     local current_phase_num=""
     local in_range=true
-    local range_started=false
-
     # If --from is specified, we start out of range until we hit it
     if [[ -n "$FILTER_FROM" ]]; then
         in_range=false
-        range_started=false
     fi
 
     while IFS= read -r line; do
@@ -313,7 +315,6 @@ parse_tasks() {
             # --- Apply --from / --to range filter ---
             if [[ -n "$FILTER_FROM" ]] && [[ "$task_id" == "$FILTER_FROM" ]]; then
                 in_range=true
-                range_started=true
             fi
             if [[ "$in_range" != true ]]; then
                 skipped=$((skipped + 1))
@@ -452,7 +453,7 @@ build_impl_prompt() {
     local work_branch="${5:-$BRANCH}"
 
     # Prepend bootstrap context
-    build_agent_bootstrap "$work_dir"
+    build_agent_bootstrap "$work_dir" "$work_branch"
     echo ""
 
     cat <<EOF
@@ -482,6 +483,7 @@ EOF
 
 build_agent_bootstrap() {
     local work_dir="${1:-$PROJECT_ROOT}"
+    local git_branch="${2:-$BRANCH}"
 
 cat <<BOOTSTRAP
 ## Agent Bootstrap Context
@@ -489,7 +491,7 @@ cat <<BOOTSTRAP
 - **Suite layout**: \`$ORCH_SUITE_LAYOUT\`
 - **Guidelines**: Read \`AGENTS.md\` and \`.claude/CLAUDE.md\` when present
 - **Git remote**: \`$GIT_REMOTE\` (NOT origin)
-- **Git branch**: \`$BRANCH\`
+- **Git branch**: \`$git_branch\`
 - **Test command**: \`${TEST_CMD:-none}\`
 - **Lint command**: \`${LINT_CMD:-none}\`
 - **Commit format**: \`<files-changed> — <description>\`
@@ -564,7 +566,9 @@ dispatch_agent() {
     fi
 
     orch_dispatch_tmux_window "orchestrator" "$window_name" "$agent" "$prompt_file" "$work_dir" "$exit_file"
-    log "  Dispatched $agent in tmux window 'orchestrator:$window_name'"
+    while IFS= read -r line; do
+        log "  $line"
+    done < <(orch_dispatch_summary "orchestrator" "$window_name" "$agent" "$exit_file")
 }
 
 # =============================================================================
@@ -828,7 +832,8 @@ parallel_group_allowed() {
 escalate() {
     local task_id="$1"
     local reason="$2"
-    local escalation_file="$PROJECT_ROOT/planning/reviews/ESCALATION-${task_id}-$(date +%Y%m%d-%H%M%S).md"
+    local escalation_file
+    escalation_file="$PROJECT_ROOT/planning/reviews/ESCALATION-${task_id}-$(date +%Y%m%d-%H%M%S).md"
 
     cat > "$escalation_file" <<EOF
 # ESCALATION: $task_id

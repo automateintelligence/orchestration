@@ -28,6 +28,7 @@ For shell script changes:
 
 ```bash
 bash -n scripts/*.sh
+bash tests/runtime-regressions.sh
 git diff --check
 ```
 

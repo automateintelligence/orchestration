@@ -8,7 +8,7 @@
 #   SPECS  — specs directory (e.g., specs/my-feature)
 # =============================================================================
 
-DISPATCH := .claude/scripts/dispatch.sh
+DISPATCH := .claude/orchestration/scripts/dispatch.sh
 PLAN ?=
 BRANCH ?=
 SPECS ?=

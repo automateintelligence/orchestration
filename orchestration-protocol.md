@@ -66,10 +66,11 @@
 ```bash
 cd "$PROJECT_ROOT" && codex exec \
   "Read and implement the plan at <plan-file-path>. \
-   Work on branch <branch-name>. \
+   Work on the assigned branch or worktree branch for this task. \
    Follow .codex/ prompts and <specs-path> specifications. \
-   Commit immediately after EVERY completed task (one task per commit; no batching) with descriptive messages. \
-   Mark completed tasks with [x] in tasks.md." \
+   Commit locally immediately after every completed task (one task per commit; no batching) with descriptive messages. \
+   Do NOT push unless the operator explicitly asks. \
+   Do NOT edit tasks.md; the orchestrator owns task-state mutation." \
   --full-auto
 ```
 
@@ -87,8 +88,8 @@ cd "$PROJECT_ROOT" && codex exec review \
 
 ### Claude Code -- Code Review
 ```bash
-cd "$PROJECT_ROOT" && claude -p \
-  "Review the latest commits on branch <branch-name> using: git log --oneline -10 && git diff main..<branch-name>. \
+cd "$PROJECT_ROOT" && env -u CLAUDECODE claude -p \
+  "Review the latest commits on branch <branch-name> using: git log --oneline -10 && git diff <compare-range>. \
    Perform code review as you would for a PR, regardless if there is a PR or not.  \
    Check against the plan at <plan-file-path> and <specs-path>/spec.md. \
    Focus on: correctness, edge cases, security, test coverage, \
@@ -119,7 +120,7 @@ cd "$PROJECT_ROOT" && claude -p \
 |  EXECUTION: Codex implements                            |
 |  - Receives plan file path + branch name                |
 |  - Implements, tests, commits after every task          |
-|  - Marks tasks [x] in tasks.md                          |
+|  - Leaves task-state mutation to the orchestrator       |
 +------------------------+--------------------------------+
                          v
 +---------------------------------------------------------+
@@ -149,10 +150,13 @@ cd "$PROJECT_ROOT" && claude -p \
 - Tasks marked `[P]` in tasks.md may be dispatched to separate agents simultaneously
 - Use git worktrees to avoid branch conflicts: `git worktree add ../proj-<task-id> <branch>`
 - Each parallel agent gets its own worktree and sub-branch
-- Orchestrator merges completed worktree branches back to feature branch
+- Orchestrator reviews each worktree branch against the parent branch before any merge
+- Only review `PASS` results are merged back to the parent branch
+- `ORCH_PARALLEL_GROUP_HOOK` can force a `[P]` batch back to sequential execution when the consuming repo declares a conflict
 
 ### Completion Detection
-- **Loop mode** (Section 10): Polls tmux pane exit status + `.exit` files every 30s
+- **Loop mode** (Section 10): Polls tmux pane exit status + `.exit` files on a configurable cadence (`30s` for code by default)
+- **Document mode** (Section 11): Uses the same tmux polling pattern with a `15s` default cadence
 - **Manual mode**: Check git log on feature branch for new commits
 - **Fallback**: Read process output from agent PIDs
 - **Verification gate**: Before marking a task complete, run configured test/lint commands directly (not delegated). See `verify_task()` in `orchestrate-loop.sh`.
@@ -207,7 +211,7 @@ Reviews use structured prompt templates that enforce concise, actionable output:
 - **Codex reviewer**: `scripts/review-prompt-codex.md`
 - **Claude Code reviewer**: `scripts/review-prompt-claude.md`
 
-Templates are rendered by `dispatch.sh` with placeholders (`{BRANCH}`, `{PLAN_FILE}`, `{SPECS}`, `{REVIEW_FILE}`, `{COMMIT_RANGE}`) filled at dispatch time.
+Templates are rendered by `dispatch.sh` with placeholders (`{BRANCH}`, `{PLAN_FILE}`, `{SPECS}`, `{REVIEW_FILE}`, `{COMPARE_RANGE}`, `{COMMIT_RANGE}`) filled at dispatch time.
 
 ### Core rules enforced by templates
 1. ONLY report items that require action -- no observations, no praise, no summaries
@@ -265,8 +269,8 @@ When working on frontend code:
 
 ### Commit messages
 - Format: `<files-changed> -- <description>`
-- Git remote: configurable via `GIT_REMOTE` env var (default: `github`)
-- Push after commit: `git push $GIT_REMOTE <branch>`
+- Git remote: configurable via `GIT_REMOTE` env var (default: `github`) for prompts, review context, and operator-facing commands
+- Pushes are operator-controlled; workers commit locally unless explicitly told to push
 - Current convention per git log (maintain consistency)
 
 ### Commit cadence (mandatory)
@@ -293,9 +297,12 @@ When working on frontend code:
 | Secrets | `~/.secrets/<project>.env` |
 | Review prompt templates | `scripts/review-prompt-*.md` |
 | Dispatch script (single task) | `scripts/dispatch.sh` |
+| Shared runtime helpers | `scripts/lib/orch-agent-runtime.sh` |
 | Orchestration loop script | `scripts/orchestrate-loop.sh` |
 | Doc orchestration script | `scripts/orchestrate-doc.sh` |
-| Orchestration state | `orchestration-state.env` |
+| Vendored state file | `.claude/orchestration-state.env` |
+| Standalone code state file | `orchestration-state.env` |
+| Standalone doc state file | `orchestration-doc-state.env` |
 | Makefile orchestration targets | `makefile-targets.mk` |
 | JSON state file (code loop) | `orchestration-state.json` |
 | JSON state file (doc loop) | `{output-dir}/phase-{N}-state.json` |
@@ -306,7 +313,7 @@ When working on frontend code:
 
 ### Overview
 
-The orchestration loop (`orchestrate-loop.sh`) is a persistent bash script that runs inside a tmux session. It replaces the manual dispatch workflow by autonomously:
+The orchestration loop (`orchestrate-loop.sh`) is the canonical execution path. It is a persistent bash script that runs inside a tmux session and replaces the manual dispatch workflow by autonomously:
 
 1. Parsing `tasks.md` for pending tasks
 2. Dispatching Codex or Claude Code to implement each task
@@ -336,7 +343,7 @@ The orchestration loop (`orchestrate-loop.sh`) is a persistent bash script that 
                                v
               +--------------------------------+
               |  POLL: Wait for completion      |
-              |  (check .exit file every 30s)   |
+              |  (configurable cadence)         |
               +----------------+---------------+
                                v
               +--------------------------------+
@@ -449,9 +456,10 @@ Tasks marked `[P]` that are consecutive in tasks.md are grouped for parallel exe
 2. Each worktree gets a sub-branch: `<feature-branch>/T018`
 3. Dispatch agents simultaneously (one per worktree)
 4. Wait for all to complete
-5. Merge sub-branches back to feature branch sequentially
-6. Run reviews on the merged code
-7. Tasks that fail review are reset to `[ ]` for the sequential loop to retry
+5. Review each sub-branch against the parent feature branch while it is still isolated
+6. Merge only `PASS` worktree branches back to the feature branch
+7. Clean up unmerged worktrees and reset `NEEDS_FIXES` tasks to `[ ]` for the sequential loop to retry
+8. Optionally gate the whole batch through `ORCH_PARALLEL_GROUP_HOOK` when the consuming repo needs custom conflict rules
 
 ### Starting the Orchestrator
 
@@ -518,14 +526,14 @@ tmux send-keys -t orchestrator C-c
 # Force stop (kills all agent windows too)
 tmux kill-session -t orchestrator
 
-# State is always preserved at orchestration-state.env
+# State is preserved at the resolved state-file path (`.claude/orchestration-state.env` for vendored installs)
 ```
 
 ### Resuming After Escalation
 
 When the orchestrator halts for escalation:
 1. An `ESCALATION-*.md` file is written to `planning/reviews/`
-2. The orchestrator state is saved to `orchestration-state.env`
+2. The orchestrator state is saved to the resolved state-file path
 3. Project lead reviews the escalation, resolves the issue, and resumes:
 
 ```bash
@@ -540,7 +548,7 @@ tmux new-session -s orchestrator \
 |--------|---------|-------------|
 | `--specs <path>` | `$ORCH_SPECS` env var | Specs directory |
 | `--plan <path>` | `<specs>/plan.md` | Plan file for agent prompts |
-| `--poll-interval <sec>` | `30` | Seconds between completion checks |
+| `--poll-interval <sec>` | `30` | Seconds between code-loop completion checks |
 | `--max-iterations <n>` | `3` | Max implement->review cycles per task |
 | `--timeout <sec>` | `3600` | Max seconds per agent dispatch |
 | `--env <path>` | *(none)* | Environment file to source |
@@ -554,7 +562,19 @@ tmux new-session -s orchestrator \
 | `--test-cmd <cmd>` | *(none)* | Test command to run for verification |
 | `--lint-cmd <cmd>` | *(none)* | Lint command to run for verification |
 | `--bootstrap-reads <files>` | *(none)* | Comma-separated files agents must read first |
-| `--git-remote <name>` | `github` | Git remote name for push operations |
+| `--git-remote <name>` | `github` | Git remote name shown in prompts and review context |
+
+Environment overrides:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ORCH_POLL_INTERVAL` | `30` code / `15` doc | Shared poll interval override for tmux-based modes |
+| `ORCH_CODE_POLL_INTERVAL` | inherits shared or `30` | Code-loop-specific poll interval |
+| `ORCH_DOC_POLL_INTERVAL` | inherits shared or `15` | Document-loop-specific poll interval |
+| `ORCH_PARALLEL_GROUP_HOOK` | *(none)* | Command run before dispatching a `[P]` batch; non-zero forces sequential fallback |
+| `ORCH_EXPECTED_DIRS` | `src/|tests/|specs/|planning/|docs/|\.claude/|deploy/|tools/|Makefile` | Expected path regex for git drift checks |
+
+When `ORCH_PARALLEL_GROUP_HOOK` runs, it receives `ORCH_PARALLEL_TASK_IDS`, `ORCH_PARALLEL_TASK_PHASES`, `ORCH_PARALLEL_TASK_DESCRIPTIONS`, `ORCH_TASKS_FILE`, `ORCH_PROJECT_ROOT`, and `ORCH_BRANCH`.
 
 ### Integration with Manual Dispatch
 
@@ -571,7 +591,7 @@ The project lead can always stop the loop and use `dispatch.sh` for manual contr
 | Orchestration log | `planning/orchestration-log.md` | Complete execution history |
 | Review files | `planning/reviews/<branch>-<task>-i<n>-<reviewer>-review.md` | Per-task, per-iteration reviews |
 | Escalation files | `planning/reviews/ESCALATION-<task>-<timestamp>.md` | Issues requiring project lead |
-| State file | `orchestration-state.env` | Resume state |
+| State file | resolved from install layout | Resume state |
 | JSON state file | `orchestration-state.json` | Machine-parseable state |
 
 ## 11. Document Orchestration Mode
@@ -770,9 +790,9 @@ claude -p \
 
 ### Integration with Section 10
 
-Sections 10 and 11 are complementary:
-- **Section 10** (`orchestrate-loop.sh`): For code tasks from `tasks.md`
-- **Section 11** (`orchestrate-doc.sh`): For document draft-review-implement cycles
+Sections 10 and 11 are the primary tmux-based execution surfaces:
+- **Section 10** (`orchestrate-loop.sh`): Canonical path for code tasks from `tasks.md`
+- **Section 11** (`orchestrate-doc.sh`): Canonical path for document draft-review-implement cycles
 
 Both use the same tmux dispatch pattern, .exit file polling, and review verdict parsing. The orchestrator can invoke either based on the nature of the work.
 
@@ -787,11 +807,11 @@ Both use the same tmux dispatch pattern, .exit file polling, and review verdict 
 | Phase orchestration tracker | `{output-dir}/phase-{N}-orchestration-tracker.md` |
 | Phase review artifacts | `{output-dir}/phase-{N}-review-r{round}-{reviewer}.md` |
 
-## 12. Single-Session Mode
+## 12. Single-Session Fallback
 
 ### Overview
 
-Single-session mode is an alternative execution model for when the orchestrator runs inside Claude Code's interactive session rather than coordinating separate tmux processes. In this mode, the orchestrator IS the implementer but uses internal subagents (Task tool) for context isolation and parallelism.
+Single-session mode is a fallback execution model for when the canonical tmux-based path is unavailable or not worth its overhead. In this mode, the orchestrator runs inside Claude Code's interactive session, acts as the implementer, and uses internal subagents (Task tool) for context isolation and parallelism.
 
 ### When to Use
 
@@ -805,7 +825,7 @@ Single-session mode is an alternative execution model for when the orchestrator 
 | Aspect | Multi-Session (Sections 10-11) | Single-Session |
 |--------|-------------------------------|----------------|
 | Dispatch | tmux windows + CLI processes | Task tool subagents |
-| Polling | `.exit` file checks every 30s | Task tool returns synchronously |
+| Polling | Configurable `.exit` file checks (`30s` code / `15s` doc defaults) | Task tool returns synchronously |
 | Tracking | Markdown tracker + `orchestration-state.env` | TodoWrite + JSON state file |
 | Verification | Orchestrator runs directly | Same -- orchestrator runs directly |
 | Context isolation | Separate CLI processes | Subagent context boundaries |
@@ -840,8 +860,9 @@ Task(
     prompt="""Read the plan at $ORCH_SPECS/plan.md.
     Implement task T018: [description].
     Work on branch <feature-branch>.
-    Read .claude/CLAUDE.md for project conventions.
+    Read AGENTS.md and .claude/CLAUDE.md for project conventions when present.
     Git remote is '$GIT_REMOTE' (NOT origin).
+    Do NOT push unless explicitly asked.
     Commit format: <files-changed> -- <description>
     """,
     description="Implement T018"
@@ -886,7 +907,7 @@ In single-session mode, the orchestrator can read the actual diff content (not j
 ### Agent Bootstrap
 
 Every dispatched subagent must receive the Agent Bootstrap Context block (see `build_agent_bootstrap()` in `orchestrate-loop.sh`). This includes:
-- `.claude/CLAUDE.md` path
+- `AGENTS.md` plus `.claude/CLAUDE.md` when present
 - Git remote name
 - Test/lint commands
 - Bootstrap reads file list

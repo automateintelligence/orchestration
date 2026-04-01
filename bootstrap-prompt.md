@@ -42,9 +42,13 @@ Skip any I've already answered in my initial message.
   (e.g., CLAUDE.md, architecture docs, coding standards)
 
 ### Group D — Execution Mode
+- Is this a vendored `.claude/orchestration/` copy inside the project repo (primary), or a standalone checkout of the suite for local development?
 - Multi-session (tmux + Codex CLI + Claude CLI) or single-session (Claude Code with Task tool)?
+- If you want single-session mode, is that a deliberate fallback from the canonical tmux workflow?
 - How many review rounds per task? (default: 2 for docs, 3 for code)
 - Any directories that should be treated as "off-limits" for drift detection?
+- Any repo-specific parallel conflict boundaries that should gate `[P]` batches before dispatch?
+- Do you want shared polling defaults, or separate code/doc polling intervals?
 
 ## Step 2: Generate Configuration
 
@@ -65,6 +69,10 @@ GIT_REMOTE={git_remote}
 TEST_CMD={test_cmd}
 LINT_CMD={lint_cmd}
 BOOTSTRAP_READS={bootstrap_reads}
+ORCH_POLL_INTERVAL={shared_poll_interval_or_blank}
+ORCH_CODE_POLL_INTERVAL={code_poll_interval_or_blank}
+ORCH_DOC_POLL_INTERVAL={doc_poll_interval_or_blank}
+ORCH_PARALLEL_GROUP_HOOK={parallel_group_hook_or_blank}
 TIMESTAMP=
 ```
 
@@ -75,7 +83,8 @@ Generate the `build_agent_bootstrap()` output customized for this project:
 ## Agent Bootstrap Context
 - **Project root**: {project_root}
 - **Project**: {project_name} — {description}
-- **Guidelines**: Read `{claude_md_path}` for project conventions
+- **Suite layout**: `{suite_layout}` (`vendored` preferred, `standalone` supported for local suite development)
+- **Guidelines**: Read `AGENTS.md` and `{claude_md_path}` when present
 - **Git remote**: `{git_remote}` (NOT origin)
 - **Git branch**: `{branch}`
 - **Test command**: `{test_cmd}` (run before committing)
@@ -104,7 +113,9 @@ tmux new-session -s orchestrator \
    --env {env_file}'
 ```
 
-For single-session mode, produce a TodoWrite-based execution plan.
+For standalone suite development, adjust the script path to `{project_root}/scripts/orchestrate-loop.sh`.
+
+For single-session mode, produce a TodoWrite-based execution plan and label it as a fallback to the canonical multi-session path.
 
 ### Artifact 4: Quick Reference Card
 A 10-line cheat sheet for monitoring the orchestration run:

@@ -8,6 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/orch-agent-runtime.sh
 source "$SCRIPT_DIR/lib/orch-agent-runtime.sh"
 orch_resolve_paths "$SCRIPT_DIR"
 PROJECT_ROOT="$ORCH_PROJECT_ROOT"
@@ -111,9 +112,6 @@ codex_implement() {
     local specs="${3:-$DEFAULT_SPECS}"
     cd "$PROJECT_ROOT"
 
-    local model_flag=""
-    [[ -n "$CODEX_MODEL" ]] && model_flag="-m $CODEX_MODEL"
-
     local bootstrap
     bootstrap=$(build_agent_bootstrap "$branch" "$specs")
 
@@ -139,27 +137,25 @@ codex_review() {
     local branch="$1"
     local plan_file="${2:-$DEFAULT_SPECS/plan.md}"
     local specs="${3:-$DEFAULT_SPECS}"
-    local review_file="$REVIEWS_DIR/${branch//\//-}-codex-review-$(date +%Y%m%d-%H%M%S).md"
+    local review_file
+    review_file="$REVIEWS_DIR/${branch//\//-}-codex-review-$(date +%Y%m%d-%H%M%S).md"
 
     cd "$PROJECT_ROOT"
 
     local prompt
     prompt=$(render_review_prompt "$TEMPLATES_DIR/review-prompt-codex.md" "$branch" "$plan_file" "$specs" "$review_file")
 
-    local model_flag=""
-    [[ -n "$CODEX_MODEL" ]] && model_flag="-m $CODEX_MODEL"
-    codex exec review "$prompt" --full-auto $model_flag
+    local -a model_args=()
+    [[ -n "$CODEX_MODEL" ]] && model_args=(-m "$CODEX_MODEL")
+    codex exec review "$prompt" --full-auto "${model_args[@]}"
 }
 
 claude_implement() {
     local plan_file="$1"
     local branch="$2"
     local specs="${3:-$DEFAULT_SPECS}"
-    local model="${4:-}"
 
     cd "$PROJECT_ROOT"
-    local model_flag=""
-    [[ -n "$model" ]] && model_flag="--model $model"
 
     local bootstrap
     bootstrap=$(build_agent_bootstrap "$branch" "$specs")
@@ -186,7 +182,8 @@ claude_review() {
     local branch="$1"
     local plan_file="${2:-$DEFAULT_SPECS/plan.md}"
     local specs="${3:-$DEFAULT_SPECS}"
-    local review_file="$REVIEWS_DIR/${branch//\//-}-claude-review-$(date +%Y%m%d-%H%M%S).md"
+    local review_file
+    review_file="$REVIEWS_DIR/${branch//\//-}-claude-review-$(date +%Y%m%d-%H%M%S).md"
 
     cd "$PROJECT_ROOT"
 
@@ -237,12 +234,12 @@ show_status() {
     if [ -f "$DEFAULT_SPECS/tasks.md" ]; then
         local total
         total=$(grep -cE '^\- \[[ xXo]\]' "$DEFAULT_SPECS/tasks.md" 2>/dev/null || echo 0)
-        local done
-        done=$(grep -cE '^\- \[[xX]\]' "$DEFAULT_SPECS/tasks.md" 2>/dev/null || echo 0)
+        local done_count
+        done_count=$(grep -cE '^\- \[[xX]\]' "$DEFAULT_SPECS/tasks.md" 2>/dev/null || echo 0)
         local wip
         wip=$(grep -cE '^\- \[o\]' "$DEFAULT_SPECS/tasks.md" 2>/dev/null || echo 0)
-        local todo=$((total - done - wip))
-        echo "  Total: $total | Done: $done | WIP: $wip | TODO: $todo"
+        local todo=$((total - done_count - wip))
+        echo "  Total: $total | Done: $done_count | WIP: $wip | TODO: $todo"
     else
         echo "  No tasks.md found at $DEFAULT_SPECS/tasks.md"
     fi
@@ -251,7 +248,11 @@ show_status() {
     git worktree list
     echo ""
     echo "=== Recent reviews ==="
-    ls -lt "$REVIEWS_DIR"/*.md 2>/dev/null | head -5 || echo "  No reviews yet"
+    find "$REVIEWS_DIR" -maxdepth 1 -type f -name '*.md' -printf '%T@ %p\n' 2>/dev/null \
+        | sort -nr \
+        | head -5 \
+        | cut -d' ' -f2- \
+        || echo "  No reviews yet"
 }
 
 # --- MAIN ---

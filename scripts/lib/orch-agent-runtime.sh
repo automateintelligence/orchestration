@@ -53,6 +53,19 @@ orch_write_prompt_file() {
     printf '%s' "$prompt" > "$prompt_file"
 }
 
+orch_dispatch_summary() {
+    local session_name="$1"
+    local window_name="$2"
+    local agent="$3"
+    local exit_file="${4:-}"
+
+    if [[ -n "$exit_file" ]]; then
+        printf "Dispatched %s in tmux window '%s:%s'\nExit file: %s\n" "$agent" "$session_name" "$window_name" "$exit_file"
+    else
+        printf "Dispatched %s in tmux window '%s:%s'\n" "$agent" "$session_name" "$window_name"
+    fi
+}
+
 orch_build_agent_command() {
     local agent="$1"
     local prompt_file="$2"
@@ -63,6 +76,7 @@ orch_build_agent_command() {
     work_dir_q=$(printf '%q' "$work_dir")
     prompt_file_q=$(printf '%q' "$prompt_file")
 
+    # shellcheck disable=SC2016
     if [[ "$agent" == "codex" ]]; then
         printf 'cd %s && codex exec "$(cat %s)" --full-auto' "$work_dir_q" "$prompt_file_q"
         if [[ -n "${CODEX_MODEL:-}" ]]; then
@@ -81,6 +95,7 @@ orch_wrap_command_with_exit_capture() {
     local exit_file="$2"
     local exit_file_q
     exit_file_q=$(printf '%q' "$exit_file")
+    # shellcheck disable=SC2016
     printf '%s; status=$?; printf "%%s" "$status" > %s; exit "$status"' "$command" "$exit_file_q"
 }
 

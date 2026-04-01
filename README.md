@@ -2,6 +2,8 @@
 
 A multi-agent development workflow for coordinating Claude.ai (orchestrator), Codex CLI (implementer), and Claude Code CLI (reviewer). Drop this into any repo to get autonomous implement -> review -> iterate cycles driven by a tasks.md file.
 
+The primary installation model is a vendored copy at `.claude/orchestration/` inside the consuming repository, and the primary execution model is the multi-session tmux workflow. Standalone checkout and single-session execution remain supported fallback modes for developing or debugging the suite itself.
+
 ## Quick Start
 
 1. **Copy the suite into your project's `.claude/orchestration/` directory:**
@@ -49,12 +51,18 @@ A multi-agent development workflow for coordinating Claude.ai (orchestrator), Co
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `ORCH_SPECS` | `specs` | Default specs directory (used when `--specs` not passed) |
-| `GIT_REMOTE` | `github` | Git remote name for push operations |
+| `GIT_REMOTE` | `github` | Git remote name shown in prompts and review context |
 | `CODEX_MODEL` | *(none)* | Model override for Codex CLI (e.g., `o3`) |
 | `CLAUDE_MODEL` | *(none)* | Model override for Claude Code CLI |
+| `ORCH_POLL_INTERVAL` | `30` code / `15` doc | Shared poll interval override for tmux-based execution modes |
+| `ORCH_CODE_POLL_INTERVAL` | inherits shared or `30` | Code-loop poll interval override |
+| `ORCH_DOC_POLL_INTERVAL` | inherits shared or `15` | Document-loop poll interval override |
+| `ORCH_PARALLEL_GROUP_HOOK` | *(none)* | Optional command that can block an unsafe `[P]` batch and force sequential fallback |
 | `ORCH_EXPECTED_DIRS` | *(see below)* | Pipe-separated regex for expected file paths (drift detection) |
 
 `ORCH_EXPECTED_DIRS` defaults to `src/|tests/|specs/|planning/|docs/|\.claude/|deploy/|tools/|Makefile` and controls which file paths are considered "expected" during git drift detection. Set this to match your project's directory structure.
+
+When `ORCH_PARALLEL_GROUP_HOOK` is set, the code loop exports `ORCH_PARALLEL_TASK_IDS`, `ORCH_PARALLEL_TASK_PHASES`, `ORCH_PARALLEL_TASK_DESCRIPTIONS`, `ORCH_TASKS_FILE`, `ORCH_PROJECT_ROOT`, and `ORCH_BRANCH` before invoking the hook. Exit `0` to allow the batch or non-zero to fall back to sequential execution.
 
 ### Makefile Variables
 
@@ -70,7 +78,7 @@ A multi-agent development workflow for coordinating Claude.ai (orchestrator), Co
 |--------|---------|-------------|
 | `--specs <path>` | `$ORCH_SPECS` | Specs directory |
 | `--plan <path>` | `<specs>/plan.md` | Plan file |
-| `--poll-interval <sec>` | `30` | Poll frequency |
+| `--poll-interval <sec>` | `30` | Code-loop poll frequency (`orchestrate-doc.sh` defaults to 15s unless overridden by env) |
 | `--max-iterations <n>` | `3` | Max review-fix cycles |
 | `--timeout <sec>` | `3600` | Max seconds per agent |
 | `--test-cmd <cmd>` | *(none)* | Verification test command |
@@ -84,6 +92,19 @@ A multi-agent development workflow for coordinating Claude.ai (orchestrator), Co
 | `--dry-run` | `false` | Print without executing |
 | `--resume` | `false` | Resume from state file |
 | `--env <path>` | *(none)* | Environment file to source |
+
+## Execution Model
+
+The canonical path is the tmux-based multi-session workflow driven by `scripts/orchestrate-loop.sh` and `scripts/orchestrate-doc.sh`.
+
+- Primary: vendored `.claude/orchestration/` inside the consuming repository, using tmux windows plus Codex/Claude CLI workers.
+- Fallback: single-session orchestration inside Claude Code when tmux or a required CLI is unavailable.
+- Development mode: a standalone checkout of this repository is supported for editing and testing the suite.
+
+## Installation Layouts
+
+- Vendored-first: copy this suite into `.claude/orchestration/` inside the consuming repository. Runtime path resolution treats the consuming repo root as the project root, and the state file lives at `.claude/orchestration-state.env`.
+- Standalone: when developing the suite repo directly, runtime path resolution treats the suite root as the project root. State files live beside the suite (`orchestration-state.env` for code mode, `orchestration-doc-state.env` for doc mode).
 
 ## New Project Setup
 
@@ -113,6 +134,7 @@ See [bootstrap-prompt.md](bootstrap-prompt.md) for the full template.
 | `orchestrate-doc-prompt-template.md` | Prompt template for document orchestration |
 | `makefile-targets.mk` | Makefile include for `orch-*` targets |
 | `scripts/dispatch.sh` | Single-task dispatch helper |
+| `scripts/lib/orch-agent-runtime.sh` | Shared path resolution, polling defaults, hardened Claude launches, and dispatch helpers |
 | `scripts/orchestrate-loop.sh` | Autonomous code task loop |
 | `scripts/orchestrate-doc.sh` | Document draft/review/implement dispatch |
 | `scripts/review-prompt-codex.md` | Code review template (Codex) |
@@ -131,8 +153,11 @@ After a review PASS, the orchestrator runs test/lint commands directly (not dele
 ### JSON State File
 In addition to `orchestration-state.env`, the loop produces a machine-parseable `.json` state file for programmatic consumption.
 
-### Single-Session Mode (Section 12)
-When tmux or Codex CLI is unavailable, the orchestrator can run inside Claude Code's interactive session using Task tool subagents for context isolation.
+### Parallel Conflict Hook
+Parallel `[P]` batches can be screened by a consuming repository before dispatch. Use `ORCH_PARALLEL_GROUP_HOOK` to encode repo-specific conflict boundaries without hardcoding them into the template.
+
+### Single-Session Fallback (Section 12)
+When the canonical tmux workflow is unavailable, the orchestrator can run inside Claude Code's interactive session using Task tool subagents for context isolation.
 
 ### Error Recovery
 Agent failures are classified (dependency errors, context overflow, timeout) with diagnostic capture and configurable re-dispatch limits.
@@ -149,7 +174,7 @@ See [orchestration-protocol.md](orchestration-protocol.md) for the full protocol
 - Review standards and verdict rules (Section 6)
 - Autonomous loop operation (Section 10)
 - Document orchestration mode (Section 11)
-- Single-session mode (Section 12)
+- Single-session fallback (Section 12)
 
 ## Contributing
 

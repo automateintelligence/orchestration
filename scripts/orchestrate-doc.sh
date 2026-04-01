@@ -19,6 +19,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/orch-agent-runtime.sh
 source "$SCRIPT_DIR/lib/orch-agent-runtime.sh"
 orch_resolve_paths "$SCRIPT_DIR"
 PROJECT_ROOT="$ORCH_PROJECT_ROOT"
@@ -149,8 +150,10 @@ dispatch_in_window() {
     ensure_tmux_session
 
     orch_dispatch_tmux_window "$TMUX_SESSION" "$window_name" "$agent" "$prompt_file" "$PROJECT_ROOT" "$exit_file"
-    log "Dispatched $agent in tmux window '${TMUX_SESSION}:${window_name}'"
-    log "Exit file: $exit_file"
+    while IFS= read -r line; do
+        log "$line"
+    done < <(orch_dispatch_summary "$TMUX_SESSION" "$window_name" "$agent" "$exit_file")
+    log "Suggested poll cadence: ${DOC_POLL_INTERVAL}s"
     log "Monitor:   tmux capture-pane -t ${TMUX_SESSION}:${window_name} -p | tail -20"
 }
 
@@ -293,7 +296,7 @@ write_state_json() {
     local step_list=""
     local code_list=""
 
-    for f in /tmp/phase${phase}-*.exit; do
+    for f in /tmp/phase"${phase}"-*.exit; do
         [[ -f "$f" ]] || continue
         local step_name
         step_name="$(basename "$f" .exit | sed "s/phase${phase}-//")"
@@ -516,7 +519,7 @@ do_status() {
 
     # Check exit files
     echo "=== Completion status ==="
-    for f in /tmp/phase${PHASE_NUM}-*.exit; do
+    for f in /tmp/phase"${PHASE_NUM}"-*.exit; do
         [[ -f "$f" ]] || continue
         local step
         step=$(basename "$f" .exit | sed "s/phase${PHASE_NUM}-//")
@@ -532,7 +535,11 @@ do_status() {
     # Check output files
     if [[ -n "$OUTPUT_DIR" ]]; then
         echo "=== Files in $OUTPUT_DIR ==="
-        ls -lt "$OUTPUT_DIR"/phase-${PHASE_NUM}* 2>/dev/null | head -10 || echo "  No phase files found"
+        find "$OUTPUT_DIR" -maxdepth 1 -type f -name "phase-${PHASE_NUM}*" -printf '%T@ %p\n' 2>/dev/null \
+            | sort -nr \
+            | head -10 \
+            | cut -d' ' -f2- \
+            || echo "  No phase files found"
     fi
 
     # Check tracker
