@@ -150,3 +150,16 @@ See [orchestration-protocol.md](orchestration-protocol.md) for the full protocol
 - Autonomous loop operation (Section 10)
 - Document orchestration mode (Section 11)
 - Single-session mode (Section 12)
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
+## Community
+
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+
+## License
+
+This project is available under the [MIT License](LICENSE).
