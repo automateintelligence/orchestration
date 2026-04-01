@@ -29,6 +29,9 @@
 #
 # Environment:
 #   ORCH_SPECS             Default specs directory (fallback if --specs not passed)
+#   ORCH_POLL_INTERVAL     Shared poll interval override for all modes
+#   ORCH_CODE_POLL_INTERVAL Mode-specific override for code-task polling
+#   ORCH_PARALLEL_GROUP_HOOK Optional command that returns 0 when a [P] batch is safe
 #   GIT_REMOTE             Git remote name (default: github)
 #   CODEX_MODEL            Model override for Codex CLI
 #   CLAUDE_MODEL           Model override for Claude Code CLI
@@ -43,19 +46,21 @@ set -euo pipefail
 
 # --- Constants ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$SCRIPT_DIR/lib/orch-agent-runtime.sh"
+orch_resolve_paths "$SCRIPT_DIR"
+PROJECT_ROOT="$ORCH_PROJECT_ROOT"
 REVIEWS_DIR="$PROJECT_ROOT/planning/reviews"
 TEMPLATES_DIR="$SCRIPT_DIR"
 LOG_FILE="$PROJECT_ROOT/planning/orchestration-log.md"
 STATE_DIR="/tmp/orch-$$"
-STATE_FILE="$PROJECT_ROOT/.claude/orchestration-state.env"
+STATE_FILE="$(orch_default_state_file code)"
 CODEX_MODEL="${CODEX_MODEL:-}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-}"
 
 # --- Defaults ---
 SPECS_PATH="${ORCH_SPECS:-specs}"
 PLAN_FILE=""
-POLL_INTERVAL=30
+POLL_INTERVAL="$(orch_default_poll_interval code)"
 MAX_ITERATIONS=3
 AGENT_TIMEOUT=3600
 DRY_RUN=false
@@ -444,6 +449,7 @@ build_impl_prompt() {
     local task_desc="$2"
     local agent="$3"
     local work_dir="${4:-$PROJECT_ROOT}"
+    local work_branch="${5:-$BRANCH}"
 
     # Prepend bootstrap context
     build_agent_bootstrap "$work_dir"
@@ -456,17 +462,19 @@ Implement the following task:
   Task ID: $task_id
   Description: $task_desc
 
-Work on branch: $BRANCH
+Working branch: $work_branch
+Parent branch: $BRANCH
 Working directory: $work_dir
+Execution mode: $([ "$work_branch" == "$BRANCH" ] && echo "sequential branch execution" || echo "parallel worktree execution")
 
 Instructions:
 1. Read the relevant sections of the plan and spec before coding.
 2. Implement the task completely — no stubs, no TODOs for core functionality.
 3. Run any relevant tests to verify your work.
-4. Commit using git remote '$GIT_REMOTE': git add <specific-files> && git commit -m '<files-changed> — <description>'
-   Push: git push $GIT_REMOTE $BRANCH
+4. Commit locally on the working branch above using: git add <specific-files> && git commit -m '<files-changed> — <description>'
+   Do NOT push unless the orchestrator or operator explicitly asks for a push.
    One task per commit; do not batch tasks.
-5. Mark this task [x] in $TASKS_FILE (line containing "$task_id").
+5. Do NOT edit $TASKS_FILE or otherwise mutate orchestrator task state; the orchestrator owns task progression, review gating, and completion markers.
 
 Follow $([ "$agent" == "codex" ] && echo ".codex/ prompts" || echo ".claude/CLAUDE.md guidelines") and project conventions.
 EOF
@@ -475,10 +483,11 @@ EOF
 build_agent_bootstrap() {
     local work_dir="${1:-$PROJECT_ROOT}"
 
-    cat <<BOOTSTRAP
+cat <<BOOTSTRAP
 ## Agent Bootstrap Context
 - **Project root**: $work_dir
-- **Guidelines**: Read \`.claude/CLAUDE.md\` for project conventions
+- **Suite layout**: \`$ORCH_SUITE_LAYOUT\`
+- **Guidelines**: Read \`AGENTS.md\` and \`.claude/CLAUDE.md\` when present
 - **Git remote**: \`$GIT_REMOTE\` (NOT origin)
 - **Git branch**: \`$BRANCH\`
 - **Test command**: \`${TEST_CMD:-none}\`
@@ -511,6 +520,7 @@ build_review_prompt() {
     local specs="$3"
     local review_file="$4"
     local reviewer="$5"
+    local base_ref="${6:-main}"
 
     local template_file="$TEMPLATES_DIR/review-prompt-${reviewer}.md"
     if [[ ! -f "$template_file" ]]; then
@@ -519,8 +529,9 @@ build_review_prompt() {
 
     # Get commit range
     local commit_range
+    local compare_range="${base_ref}..${branch}"
     commit_range=$(cd "$PROJECT_ROOT" && git log --oneline -10 "$branch" 2>/dev/null | head -1 | cut -d' ' -f1)
-    commit_range="main..${branch} (latest: ${commit_range:-unknown})"
+    commit_range="${compare_range} (latest: ${commit_range:-unknown})"
 
     local prompt
     prompt=$(cat "$template_file")
@@ -528,6 +539,7 @@ build_review_prompt() {
     prompt="${prompt//\{PLAN_FILE\}/$plan_file}"
     prompt="${prompt//\{SPECS\}/$specs}"
     prompt="${prompt//\{REVIEW_FILE\}/$review_file}"
+    prompt="${prompt//\{COMPARE_RANGE\}/$compare_range}"
     prompt="${prompt//\{COMMIT_RANGE\}/$commit_range}"
 
     echo "$prompt"
@@ -542,27 +554,16 @@ dispatch_agent() {
 
     # Write prompt to temp file to avoid shell escaping issues
     local prompt_file="$STATE_DIR/${window_name}.prompt"
-    echo "$prompt" > "$prompt_file"
-
-    local cmd=""
-    if [[ "$agent" == "codex" ]]; then
-        cmd="cd '$work_dir' && codex exec \"\$(cat '$prompt_file')\" --full-auto ${CODEX_MODEL:+-m $CODEX_MODEL}"
-    else
-        cmd="cd '$work_dir' && claude -p \"\$(cat '$prompt_file')\" --dangerously-skip-permissions ${CLAUDE_MODEL:+--model $CLAUDE_MODEL}"
-    fi
-
-    # Wrap: run command, capture exit code, signal completion
-    local full_cmd="$cmd; echo \$? > '$exit_file'"
+    orch_write_prompt_file "$prompt_file" "$prompt"
 
     if [[ "$DRY_RUN" == true ]]; then
         log "  [DRY RUN] Would dispatch $agent in window '$window_name':"
-        log "  [DRY RUN] $cmd"
+        log "  [DRY RUN] $(orch_build_agent_command "$agent" "$prompt_file" "$work_dir")"
         echo "0" > "$exit_file"
         return
     fi
 
-    # Launch in a new tmux window within the orchestrator session
-    tmux new-window -t orchestrator -n "$window_name" bash -c "$full_cmd"
+    orch_dispatch_tmux_window "orchestrator" "$window_name" "$agent" "$prompt_file" "$work_dir" "$exit_file"
     log "  Dispatched $agent in tmux window 'orchestrator:$window_name'"
 }
 
@@ -717,7 +718,7 @@ parse_verdict() {
 
     # Fallback: use claude -p to parse (handles non-standard formatting)
     log "  Verdict not found via grep, using claude -p to parse..."
-    verdict=$(claude -p \
+    verdict=$(env -u CLAUDECODE claude -p \
         "Read this file and return ONLY one word — the review verdict: PASS, NEEDS_FIXES, or ESCALATE. File contents: $(cat "$review_file")" \
         --dangerously-skip-permissions ${CLAUDE_MODEL:+--model "$CLAUDE_MODEL"} 2>/dev/null | grep -oE '(PASS|NEEDS_FIXES|ESCALATE)' | head -1)
 
@@ -736,7 +737,8 @@ parse_verdict() {
 create_worktree() {
     local task_id="$1"
     local parent_branch="$2"
-    local sub_branch="${parent_branch}/${task_id}"
+    local sub_branch
+    sub_branch=$(worktree_branch "$task_id" "$parent_branch")
     local worktree_dir="$PROJECT_ROOT/../proj-${task_id}"
 
     cd "$PROJECT_ROOT"
@@ -749,10 +751,17 @@ create_worktree() {
     echo "$worktree_dir"
 }
 
+worktree_branch() {
+    local task_id="$1"
+    local parent_branch="$2"
+    echo "${parent_branch}/${task_id}"
+}
+
 merge_worktree() {
     local task_id="$1"
     local parent_branch="$2"
-    local sub_branch="${parent_branch}/${task_id}"
+    local sub_branch
+    sub_branch=$(worktree_branch "$task_id" "$parent_branch")
     local worktree_dir="$PROJECT_ROOT/../proj-${task_id}"
 
     cd "$PROJECT_ROOT"
@@ -766,6 +775,50 @@ merge_worktree() {
     git worktree remove "$worktree_dir" 2>/dev/null || true
     git branch -d "$sub_branch" 2>/dev/null || true
     log "  Merged and cleaned up worktree for $task_id"
+}
+
+cleanup_worktree() {
+    local task_id="$1"
+    local parent_branch="$2"
+    local sub_branch
+    sub_branch=$(worktree_branch "$task_id" "$parent_branch")
+    local worktree_dir="$PROJECT_ROOT/../proj-${task_id}"
+
+    cd "$PROJECT_ROOT"
+    git worktree remove "$worktree_dir" --force 2>/dev/null || true
+    git branch -D "$sub_branch" 2>/dev/null || true
+    log "  Cleaned up unmerged worktree for $task_id"
+}
+
+parallel_group_allowed() {
+    local hook="${ORCH_PARALLEL_GROUP_HOOK:-}"
+    local -a indices=("$@")
+
+    [[ -z "$hook" ]] && return 0
+
+    local ids_csv=""
+    local phases_csv=""
+    local descriptions=""
+    local idx
+
+    for idx in "${indices[@]}"; do
+        ids_csv+="${ids_csv:+,}${TASK_IDS[$idx]}"
+        phases_csv+="${phases_csv:+,}${TASK_PHASES[$idx]}"
+        descriptions+="${TASK_IDS[$idx]}: ${TASK_DESCS[$idx]}"$'\n'
+    done
+
+    if ORCH_PARALLEL_TASK_IDS="$ids_csv" \
+        ORCH_PARALLEL_TASK_PHASES="$phases_csv" \
+        ORCH_PARALLEL_TASK_DESCRIPTIONS="$descriptions" \
+        ORCH_TASKS_FILE="$PROJECT_ROOT/$TASKS_FILE" \
+        ORCH_PROJECT_ROOT="$PROJECT_ROOT" \
+        ORCH_BRANCH="$BRANCH" \
+        bash -lc "$hook"; then
+        return 0
+    fi
+
+    log "  Parallel hook blocked batch for task ids: $ids_csv"
+    return 1
 }
 
 # =============================================================================
@@ -1017,6 +1070,15 @@ process_parallel_group() {
 
     log_section "Parallel group: $count tasks"
 
+    if ! parallel_group_allowed "${indices[@]}"; then
+        log "  Falling back to sequential execution for this batch"
+        local idx
+        for idx in "${indices[@]}"; do
+            process_task "$idx"
+        done
+        return
+    fi
+
     # Create worktrees and dispatch all implementations
     declare -A worktree_dirs
     declare -A impl_agents
@@ -1035,13 +1097,15 @@ process_parallel_group() {
         local wt_dir
         wt_dir=$(create_worktree "$task_id" "$BRANCH")
         worktree_dirs[$idx]="$wt_dir"
+        local sub_branch
+        sub_branch=$(worktree_branch "$task_id" "$BRANCH")
 
         # Mark in-progress
         mark_task "$line_num" "o"
 
         # Build and dispatch
         local impl_prompt
-        impl_prompt=$(build_impl_prompt "$task_id" "$task_desc" "$implementer" "$wt_dir")
+        impl_prompt=$(build_impl_prompt "$task_id" "$task_desc" "$implementer" "$wt_dir" "$sub_branch")
         local impl_window="impl-${task_id}-p"
 
         log "  Dispatching $implementer for $task_id (parallel)..."
@@ -1061,18 +1125,18 @@ process_parallel_group() {
         local implementer="${impl_agents[$idx]}"
         local reviewer
         reviewer=$(get_reviewer "$implementer")
+        local worktree_dir="${worktree_dirs[$idx]}"
+        local sub_branch
+        sub_branch=$(worktree_branch "$task_id" "$BRANCH")
 
-        # Merge worktree first so reviewer sees the code on the main branch
-        merge_worktree "$task_id" "$BRANCH" || continue
-
-        # Single review iteration for parallel tasks (keep it moving)
+        # Review worktree branch before any merge so review remains a true gate.
         local review_file="$REVIEWS_DIR/${BRANCH//\//-}-${reviewer}-review-${task_id}.md"
         local review_prompt
-        review_prompt=$(build_review_prompt "$BRANCH" "$PLAN_FILE" "$SPECS_PATH" "$review_file" "$reviewer")
+        review_prompt=$(build_review_prompt "$sub_branch" "$PLAN_FILE" "$SPECS_PATH" "$review_file" "$reviewer" "$BRANCH")
         local review_window="review-${task_id}-p"
 
         log "  Dispatching $reviewer to review $task_id..."
-        dispatch_agent "$review_window" "$reviewer" "$review_prompt"
+        dispatch_agent "$review_window" "$reviewer" "$review_prompt" "$worktree_dir"
         wait_for_agent "$review_window" "$task_id"
 
         local verdict
@@ -1081,10 +1145,13 @@ process_parallel_group() {
 
         case "$verdict" in
             PASS)
-                mark_task "$line_num" "x"
-                TASKS_PASSED=$((TASKS_PASSED + 1))
+                if merge_worktree "$task_id" "$BRANCH"; then
+                    mark_task "$line_num" "x"
+                    TASKS_PASSED=$((TASKS_PASSED + 1))
+                fi
                 ;;
             NEEDS_FIXES|MISSING|UNKNOWN)
+                cleanup_worktree "$task_id" "$BRANCH"
                 log "  $task_id needs fixes — will be retried as sequential task"
                 # Reset to pending so the main loop picks it up
                 mark_task "$line_num" " "

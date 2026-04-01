@@ -8,7 +8,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$SCRIPT_DIR/lib/orch-agent-runtime.sh"
+orch_resolve_paths "$SCRIPT_DIR"
+PROJECT_ROOT="$ORCH_PROJECT_ROOT"
 REVIEWS_DIR="$PROJECT_ROOT/planning/reviews"
 TEMPLATES_DIR="$SCRIPT_DIR"
 DEFAULT_SPECS="${ORCH_SPECS:-specs}"
@@ -85,7 +87,8 @@ build_agent_bootstrap() {
 
 ## Agent Bootstrap Context
 - **Project root**: $PROJECT_ROOT
-- **Guidelines**: Read \`.claude/CLAUDE.md\` for project conventions
+- **Suite layout**: \`$ORCH_SUITE_LAYOUT\`
+- **Guidelines**: Read \`AGENTS.md\` and \`.claude/CLAUDE.md\` when present
 - **Git remote**: \`${GIT_REMOTE}\` (NOT origin)
 - **Git branch**: \`${branch}\`
 - **Commit format**: \`<files-changed> -- <description>\`
@@ -123,13 +126,13 @@ ${bootstrap}
 Read and implement the plan at $plan_file.
 Work on branch $branch.
 Follow .codex/ prompts and $specs specifications.
-Commit using git remote '${GIT_REMOTE}': git add <specific-files> && git commit -m '<files-changed> -- <description>'
-Push: git push ${GIT_REMOTE} $branch
+Commit locally using: git add <specific-files> && git commit -m '<files-changed> -- <description>'
+Do NOT push unless the operator explicitly asks for it.
 One task per commit; do not batch tasks.
-Mark completed tasks with [x] in tasks.md.
+Do NOT edit tasks.md; the orchestrator owns task-state mutation.
 PROMPT
 
-    codex exec "$(cat "$prompt_file")" --full-auto $model_flag
+    orch_run_agent_direct codex "$prompt_file" "$PROJECT_ROOT"
 }
 
 codex_review() {
@@ -170,13 +173,13 @@ ${bootstrap}
 Read and implement the plan at $plan_file.
 Work on branch $branch.
 Follow .claude/CLAUDE.md guidelines and $specs specifications.
-Commit using git remote '${GIT_REMOTE}': git add <specific-files> && git commit -m '<files-changed> -- <description>'
-Push: git push ${GIT_REMOTE} $branch
+Commit locally using: git add <specific-files> && git commit -m '<files-changed> -- <description>'
+Do NOT push unless the operator explicitly asks for it.
 One task per commit; do not batch tasks.
-Mark completed tasks with [x] in tasks.md.
+Do NOT edit tasks.md; the orchestrator owns task-state mutation.
 PROMPT
 
-    claude -p "$(cat "$prompt_file")" --dangerously-skip-permissions $model_flag
+    orch_run_agent_direct claude "$prompt_file" "$PROJECT_ROOT"
 }
 
 claude_review() {
@@ -190,7 +193,10 @@ claude_review() {
     local prompt
     prompt=$(render_review_prompt "$TEMPLATES_DIR/review-prompt-claude.md" "$branch" "$plan_file" "$specs" "$review_file")
 
-    claude -p "$prompt" --dangerously-skip-permissions
+    local prompt_file="$STATE_DIR/claude-review-prompt.md"
+    mkdir -p "$STATE_DIR"
+    orch_write_prompt_file "$prompt_file" "$prompt"
+    orch_run_agent_direct claude "$prompt_file" "$PROJECT_ROOT"
 }
 
 implement_default() {
