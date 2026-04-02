@@ -1,6 +1,6 @@
 # Orchestration Protocol Suite
 
-A multi-agent development workflow for coordinating Claude.ai (orchestrator), Codex CLI (implementer), and Claude Code CLI (reviewer). Drop this into any repo to get autonomous implement -> review -> iterate cycles driven by a tasks.md file.
+A multi-agent development workflow for coordinating Claude.ai or Claude Code CLI or Codex CLI (orchestrator), Codex CLI (implementer), and Claude Code CLI (reviewer). Drop this into any repo to get autonomous implement -> review -> iterate for multiple cycles; driven by a tasks.md file.
 
 The primary installation model is a vendored copy at `.claude/orchestration/` inside the consuming repository, and the primary execution model is the multi-session tmux workflow. Standalone checkout and single-session execution remain supported fallback modes for developing or debugging the suite itself.
 
