@@ -51,9 +51,7 @@ Bootstrap runs when orchestration is absent or partially installed in the target
    - `.claude/orchestration/` scripts are present
    - Bootstrap reads files all exist
 
-10. **Present expected file layout** showing where scripts, specs, and state files should live relative to the project root.
-
-11. **Provide next-step commands** — either a tmux session launch or a native subagent execution plan with specific task numbers to start.
+10. **Present expected file layout and next-step commands** — show where scripts, specs, and state files should live relative to the project root, then provide either a tmux session launch or a native subagent execution plan with specific task numbers to start.
 
 ## Error Exits
 
