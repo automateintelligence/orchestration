@@ -41,11 +41,14 @@ Follow this sequence on every invocation:
 
 4. **Runtime** — Recommend the appropriate execution model:
    - **Native subagents** (primary): use when the host supports bounded subtask
-     delegation. Tasks dispatch synchronously via subagent calls; no tmux required.
+     delegation (Claude Task tool, Codex native subagents). No tmux required.
      This is the default recommendation.
-   - **tmux compatibility mode**: offer when the user explicitly requests
-     multi-session mode, when Codex CLI is the intended implementer, or when
-     native subagents are unavailable. Requires `tmux` and the CLI tools.
+   - **tmux compatibility mode**: offer when the user prefers multi-session pane
+     orchestration, when Codex CLI is the intended implementer, or when native
+     subagents are unavailable. Requires `tmux` and the CLI tools.
+   - **Single-session**: use when running interactively in Claude Code without
+     native subagent delegation. The orchestrator acts as implementer using the
+     Task tool for context isolation.
 
 5. **Output** — Produce artifacts and next-step commands matching the detected
    state (see Outputs section below).
@@ -78,10 +81,10 @@ Follow this sequence on every invocation:
 
 | File | Purpose |
 |------|---------|
-| `references/bootstrap-flow.md` | Bootstrap decision tree: question catalog, artifact templates, validation checklist |
+| `references/bootstrap-flow.md` | Bootstrap decision tree: detection, capability check, install path, artifact generation |
 | `references/install-paths.md` | Installation options: vendored vs standalone, directory layouts |
 | `references/runtime-modes.md` | Runtime model detail: native subagents, tmux multi-session, capability detection |
-| `references/troubleshooting.md` | Common issues: stalled loops, verdict parse failures, escalation handling |
+| `references/troubleshooting.md` | Common issues: bootstrap errors, dispatch failures, regression test failures |
 
 ---
 

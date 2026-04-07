@@ -36,11 +36,11 @@ Covers both bootstrap error scenarios and ongoing operational issues. Each entry
 
 ### Issue: Prompt-Driven Install Produced Unexpected Layout
 
-**Symptom**: After a prompt-driven install session, files are missing or misplaced; actual directory structure does not match expected layout documented in `references/install-paths.md`.
+**Symptom**: After a prompt-driven install session, files are missing or misplaced; actual directory structure does not match expected layout documented in `install-paths.md`.
 
 **Cause**: Prompt session was interrupted, or responses to configuration questions resulted in non-standard paths or missing script generation.
 
-**Resolution**: Compare actual file layout against the expected map in `references/install-paths.md`. Identify missing or misplaced files. Re-run bootstrap with vendored copy path (canonical mode) to force standard layout. If bootstrap still produces errors, see "Canonical Orchestration Files Missing" above.
+**Resolution**: Compare actual file layout against the expected map in `install-paths.md`. Identify missing or misplaced files. Re-run bootstrap with vendored copy path (canonical mode) to force standard layout. If bootstrap still produces errors, see "Canonical Orchestration Files Missing" above.
 
 ---
 

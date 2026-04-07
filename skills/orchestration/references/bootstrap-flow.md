@@ -1,6 +1,6 @@
 # Bootstrap Decision Tree
 
-Maps the bootstrap workflow. The executable prompt lives at `../../bootstrap-prompt.md`.
+Maps the bootstrap workflow. The executable prompt lives at `bootstrap-prompt.md` in the repository root.
 
 ## Entry Conditions
 
@@ -69,7 +69,7 @@ Bootstrap stops clearly in these cases:
 
 ## Canonical Reference
 
-For the full question catalog, artifact templates, validation checklist, and prompt engineering principles, see `../../bootstrap-prompt.md` in the repository root.
+For the full question catalog, artifact templates, validation checklist, and prompt engineering principles, see `bootstrap-prompt.md` in the repository root.
 
 See also:
 - `install-paths.md` — Installation options (vendored vs standalone, directory layouts)
