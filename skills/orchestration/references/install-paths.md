@@ -8,7 +8,7 @@ The primary installation method is to **vendor the orchestration repository** in
 1. Copy or clone the orchestration repository
 2. Place its contents into `.claude/orchestration/` in your project
 3. Verify the directory structure matches the layout below
-4. Reference scripts and prompts via absolute paths: `./.claude/orchestration/scripts/`, etc.
+4. Reference scripts and prompts via repo-relative paths: `.claude/orchestration/scripts/`, etc.
 
 This is the most auditable path — all orchestration code is local and under version control.
 

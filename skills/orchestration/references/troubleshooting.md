@@ -36,7 +36,7 @@ Covers both bootstrap error scenarios and ongoing operational issues. Each entry
 
 ### Issue: Prompt-Driven Install Produced Unexpected Layout
 
-**Symptom**: After a prompt-driven install session, files are missing or misplaced; actual directory structure does not match expected layout documented in `install-paths.md`.
+**Symptom**: After a prompt-driven install session, files are missing or misplaced; actual directory structure does not match expected layout documented in `references/install-paths.md`.
 
 **Cause**: Prompt session was interrupted, or responses to configuration questions resulted in non-standard paths or missing script generation.
 
@@ -56,7 +56,7 @@ Covers both bootstrap error scenarios and ongoing operational issues. Each entry
 
 ### Issue: Agent Dispatch Failures
 
-**Symptom**: Tasks fail to dispatch or agent windows never appear; `scripts/orchestrate-loop.sh` reports "failed to send .exit file" or tmux window creation errors; agent session hangs.
+**Symptom**: Tasks fail to dispatch or agent windows never appear; tmux window creation errors or agent session hangs with no progress.
 
 **Cause**: Common tmux-mode issues: tmux session not running, agent window creation failed, agent CLI is not installed, or script paths are incorrect.
 
@@ -70,7 +70,7 @@ Covers both bootstrap error scenarios and ongoing operational issues. Each entry
 
 **Cause**: File renames or moves were not reflected in test expectations or hardcoded path references in bootstrap scripts.
 
-**Resolution**: Run regression test suite: `bash tests/runtime-regressions.sh`. Review failure messages for specific file or path mismatches. Update test expectations to match new paths. If failures relate to bootstrap script paths, update `REFERENCE_FILES` list or path constants in `scripts/orchestrate-loop.sh`. Re-run tests and confirm all pass before committing changes.
+**Resolution**: Run regression test suite: `bash tests/runtime-regressions.sh`. Review failure messages for specific file or path mismatches. Update test expectations to match new paths. If failures relate to hardcoded path constants in `scripts/orchestrate-loop.sh` or `scripts/lib/orch-agent-runtime.sh`, update those constants. Re-run tests and confirm all pass before committing changes.
 
 ---
 
