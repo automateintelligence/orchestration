@@ -1,99 +1,52 @@
 # Runtime Modes
 
-The orchestrator supports three execution models. Choose based on your platform capabilities and preferences.
+The orchestrator supports three execution models. Choose based on your platform capabilities.
 
 ## Primary Mode: Native Subagent Orchestration
 
-The orchestrator dispatches bounded subtasks using the host platform's built-in agent/subagent capabilities.
+The orchestrator dispatches bounded subtasks using the host platform's built-in agent/subagent capabilities (Claude agent execution or Codex native subagents). No external process management required. Recommended for most users.
 
-**Characteristics:**
-- No external process management required
-- Tasks execute synchronously via subagent calls (Claude agent execution or Codex native subagents)
-- Context isolation and parallelism provided by the subagent runtime
-- Recommended for most users
-
-**When to use:**
-- Claude Code session with native agent execution
-- Codex CLI with native subagent dispatch
-- Any host that supports bounded subtask delegation
-
-**Reference:** Section 12 of `orchestration-protocol.md` describes the single-session mode, which typically uses this pattern with the Task tool for context isolation.
-
----
+**Reference:** Section 12 of `orchestration-protocol.md`.
 
 ## Compatibility Mode: tmux Multi-Session
 
-The orchestrator launches separate CLI processes in tmux panes/windows. Uses `orchestrate-loop.sh` for code tasks and `orchestrate-doc.sh` for document tasks. Polls for completion via `.exit` files.
+The orchestrator launches separate CLI processes in tmux panes/windows. Uses `orchestrate-loop.sh` for code tasks and `orchestrate-doc.sh` for document tasks. Polls for completion via `.exit` files. Process-level isolation with configurable polling (30s code, 15s docs).
 
-**Characteristics:**
-- Process-level isolation: each agent runs in its own tmux window
-- Configurable polling (30s for code, 15s for documents)
-- Full execution history logged to `planning/orchestration-log.md`
-- Support for parallel execution of marked `[P]` tasks
+**Use when:** User prefers pane-based orchestration, Codex is the implementer, native subagents unavailable, or `tmux` + CLI tools installed.
 
-**When to use:**
-- User explicitly prefers pane-based orchestration
-- Codex CLI is the intended implementer (ships with this pattern)
-- Native subagents are unavailable
-- `tmux` and CLI tools are installed
+**Reference:** Sections 10-11 of `orchestration-protocol.md`.
 
-**Reference:** Section 10 (`orchestrate-loop.sh`) for code orchestration; Section 11 (`orchestrate-doc.sh`) for document workflows.
+## Single-Session Mode
 
----
+The orchestrator runs inside an interactive Claude Code session. Uses the Task tool for context isolation, dispatching bounded subtasks synchronously. Simplest setup with no tmux or polling overhead.
 
-## Fallback Mode: Single-Session
+**Use when:** Running inside Claude Code, multi-session overhead not justified, or tmux unavailable.
 
-The orchestrator runs inside an interactive Claude Code session. Uses the Task tool for context isolation and parallelism, dispatching bounded subtasks synchronously.
-
-**Characteristics:**
-- Simplest setup: no tmux or separate CLI processes
-- Orchestrator and agents coexist in the same session
-- Verification (test/lint) runs directly, not delegated
-- No polling overhead — tasks return synchronously
-
-**When to use:**
-- Running inside Claude Code interactive session
-- Quick orchestration where multi-session overhead isn't justified
-- tmux unavailable or user prefers interactive mode
-
-**Reference:** Section 12 of `orchestration-protocol.md` for full details.
-
----
+**Reference:** Section 12 of `orchestration-protocol.md`.
 
 ## Capability Detection
 
 During bootstrap, detect or ask:
 
 1. **Is `git` available?** (Required for all modes.)
-2. **Does the host support native subagent dispatch?**
-   - Claude: yes (native agent execution)
-   - Codex: yes (native subagents)
-   - Other: check documentation
-3. **Is `tmux` available?** (Determines whether compatibility mode is available.)
-4. **Is CLI installed?** (Codex, Claude Code, or equivalent — relevant for tmux multi-session mode.)
-
----
+2. **Does the host support native subagent dispatch?** (Claude/Codex: yes)
+3. **Is `tmux` available?** (Enables compatibility mode)
+4. **Is CLI installed?** (Enables tmux multi-session mode)
 
 ## Selection Logic
 
-**Simple decision tree:**
-
 ```
 Native subagents supported?
-├─ Yes → Recommend primary mode (default)
-└─ No
-   └─ tmux + CLI available?
-      ├─ Yes → Recommend compatibility mode
-      └─ No
-         └─ Interactive session?
-            ├─ Yes → Recommend single-session fallback
-            └─ No → BLOCKED (no suitable runtime found)
+├─ Yes → Primary mode
+└─ No → tmux + CLI?
+   ├─ Yes → Compatibility mode
+   └─ No → Single-session mode
 ```
 
-**Always let the user override** the recommendation.
+Always let the user override.
 
 ---
 
 ## Important Note
 
-`tmux` is **not required** for orchestration. Native subagents or single-session mode both operate without it. The protocol and reference materials have been updated to reflect this — tmux is purely optional for users who prefer multi-session pane-based management.
+`tmux` is **not required** for orchestration. Both native subagents and single-session modes operate without it. The protocol reflects this — tmux is optional for users preferring pane-based management.
