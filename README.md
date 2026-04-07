@@ -128,6 +128,8 @@ Validate after each task before proceeding.
 | `CODEX_MODEL` | *(none)* | Model override for Codex CLI |
 | `CLAUDE_MODEL` | *(none)* | Model override for Claude Code CLI |
 | `ORCH_POLL_INTERVAL` | `30` code / `15` doc | Shared poll interval override (tmux modes) |
+| `ORCH_CODE_POLL_INTERVAL` | inherits shared or `30` | Code-loop-specific poll interval override |
+| `ORCH_DOC_POLL_INTERVAL` | inherits shared or `15` | Document-loop-specific poll interval override |
 | `ORCH_PARALLEL_GROUP_HOOK` | *(none)* | Optional hook to screen parallel `[P]` batches |
 | `ORCH_EXPECTED_DIRS` | `src/\|tests/\|specs/\|...` | Pipe-separated regex for drift detection |
 
@@ -146,6 +148,8 @@ Validate after each task before proceeding.
 | `--git-remote <name>` | `github` | Git remote name |
 | `--phase <n\|name>` | *(all)* | Phase filter |
 | `--tasks <ids>` | *(all)* | Task ID filter |
+| `--from <task-id>` | *(start)* | Start from this task (inclusive) |
+| `--to <task-id>` | *(end)* | Stop after this task (inclusive) |
 | `--sequential-only` | `false` | Ignore `[P]` markers |
 | `--dry-run` | `false` | Print without executing |
 | `--resume` | `false` | Resume from state file |
