@@ -17,7 +17,7 @@ launch artifacts. You will:
 
 1. **Gather context** — ask me targeted questions about the project
 2. **Generate configuration** — produce the files needed to run orchestration
-3. **Produce the launch command** — give me a ready-to-execute tmux command
+3. **Produce the launch command** — give me a ready-to-execute command for my runtime mode
 
 ## Step 1: Context Gathering
 
@@ -117,15 +117,15 @@ Args:
   git_remote: {git_remote}
   env_file: {env_file}
 ```
-Or, if dispatching directly via Task tool:
-```python
-# Dispatch orchestration subagent
-task = Task(
-    description="Run orchestration loop",
-    prompt=open("{project_root}/.claude/orchestration/scripts/orchestrate-loop-prompt.md").read(),
-    env_file="{env_file}",
+Or, if dispatching the orchestration loop directly as a subagent task:
+```
+Task(
+    description="Run orchestration loop for {project_name}",
+    prompt="Read the plan at {plan_file} and implement all pending tasks on branch {branch}. "
+           "Git remote is '{git_remote}'. Test: {test_cmd}. Lint: {lint_cmd}. "
+           "Bootstrap reads: {bootstrap_reads}.",
+    env_file="{project_root}/.claude/orchestration/orchestration-state.env",
 )
-task.run()
 ```
 
 **If tmux mode** (tmux + Codex CLI + Claude CLI available):
@@ -206,6 +206,6 @@ This prompt uses several key patterns:
 2. **Structured output** — Explicit artifact templates with placeholders
 3. **Skip logic** — "Skip any I've already answered"
 4. **Validation gate** — Checklist before execution
-5. **Dual-path** — Different outputs for multi-session vs single-session
+5. **Multi-path** — Different outputs for native subagent, tmux multi-session, and single-session modes
 6. **Concrete examples** — Every placeholder has an example value
 7. **Self-contained** — The prompt includes everything needed, no external lookups
