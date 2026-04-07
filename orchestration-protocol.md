@@ -796,7 +796,7 @@ claude -p \
 ### Integration with Section 10
 
 Sections 10 and 11 are the primary tmux-based execution surfaces:
-- **Section 10** (`orchestrate-loop.sh`): Canonical path for code tasks from `tasks.md`
+- **Section 10** (`orchestrate-loop.sh`): tmux compatibility path for code tasks from `tasks.md`
 - **Section 11** (`orchestrate-doc.sh`): Canonical path for document draft-review-implement cycles
 
 Both use the same tmux dispatch pattern, .exit file polling, and review verdict parsing. The orchestrator can invoke either based on the nature of the work.
@@ -898,7 +898,7 @@ If verification fails, the orchestrator creates a synthetic review with the fail
 
 ### Git-Based Progress Monitoring (applies to all modes)
 
-Even in single-session mode, git remains the primary progress signal. The orchestrator MUST:
+Even in native subagent mode, git remains the primary progress signal. The orchestrator MUST:
 
 1. **Snapshot HEAD** before dispatching any subagent: `git rev-parse HEAD`
 2. **After subagent returns**: run `git log --oneline {snapshot}..HEAD` to see what the agent committed
@@ -907,7 +907,7 @@ Even in single-session mode, git remains the primary progress signal. The orches
 5. **Audit uncommitted changes**: run `git diff --stat` -- if the agent left uncommitted work, either commit it or discard it before the next step
 6. **Verify commit messages**: check that commit messages follow `<files-changed> -- <description>` format and reference the correct task ID
 
-In single-session mode, the orchestrator can read the actual diff content (not just stat) to confirm implementation quality before dispatching a reviewer. This is faster than a full review cycle and catches obvious problems early.
+In native subagent mode, the orchestrator can read the actual diff content (not just stat) to confirm implementation quality before dispatching a reviewer. This is faster than a full review cycle and catches obvious problems early.
 
 ### Agent Bootstrap
 
