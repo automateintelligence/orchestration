@@ -4,13 +4,21 @@
 
 The primary installation method is to **vendor the orchestration repository** into `.claude/orchestration/` within your consuming repository.
 
-**Steps:**
-1. Copy or clone the orchestration repository
-2. Place its contents into `.claude/orchestration/` in your project
-3. Verify the directory structure matches the layout below
-4. Reference scripts and prompts via repo-relative paths: `.claude/orchestration/scripts/`, etc.
+**Install script (recommended):**
+```bash
+git clone https://github.com/automateintelligence/orchestration /tmp/orch
+/tmp/orch/install.sh .claude/orchestration
+rm -rf /tmp/orch
+```
 
-This is the most auditable path — all orchestration code is local and under version control.
+**From release tarball:**
+```bash
+tar xzf orchestration.tar.gz -C .claude/orchestration --strip-components=1
+```
+
+Both methods copy only runtime files. Dev artifacts (docs, tests, skills, community files) are excluded via `.gitattributes` export-ignore rules.
+
+Verify the directory structure matches the layout below. Reference scripts via repo-relative paths: `.claude/orchestration/scripts/`, etc.
 
 ## Convenience Path: Prompt-Driven Install
 

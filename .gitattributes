@@ -1,0 +1,12 @@
+# Exclude dev-only files from git archive / release tarballs.
+# Only runtime files survive: scripts/, protocol, bootstrap, state example, makefile targets.
+
+docs/                           export-ignore
+tests/                          export-ignore
+skills/                         export-ignore
+.github/                        export-ignore
+CODE_OF_CONDUCT.md              export-ignore
+CONTRIBUTING.md                 export-ignore
+SECURITY.md                     export-ignore
+LICENSE                         export-ignore
+.gitattributes                  export-ignore

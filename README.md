@@ -27,16 +27,19 @@ See [bootstrap-prompt.md](bootstrap-prompt.md) for the full template.
 
 ### Canonical: Vendored Copy (recommended)
 
-Copy the suite into your project's `.claude/orchestration/` directory:
+Clone and run the install script:
 
 ```bash
-cp -r ~/.claude/orchestration/ .claude/orchestration/
+git clone https://github.com/automateintelligence/orchestration /tmp/orch
+/tmp/orch/install.sh .claude/orchestration
+rm -rf /tmp/orch
 ```
 
-Or add as a git submodule:
+Or download a release tarball (runtime files only, no dev artifacts):
 
 ```bash
-git submodule add <repo-url> .claude/orchestration
+# From GitHub Releases or: make dist (in a local checkout)
+tar xzf orchestration.tar.gz -C .claude/orchestration --strip-components=1
 ```
 
 The runtime treats the consuming repository root as the project root. State files live at `.claude/orchestration-state.env`.
@@ -175,10 +178,10 @@ This is not required. The shell scripts and skill invocation patterns work witho
 
 The `skills/orchestration/` directory is the canonical skill source.
 
-**Claude:** Zip the directory and upload it as a custom skill in Claude.ai. The zip is a release artifact built from `skills/orchestration/` — it is not checked in.
+**Claude:** Zip the directory and upload it as a custom skill in Claude.ai:
 
 ```bash
-cd skills && zip -r ../dist/orchestration-skill.zip orchestration/
+make dist-skill   # builds dist/orchestration-skill.zip
 ```
 
 **Codex:** Use the directory directly as a skill source by pointing Codex at `skills/orchestration/`.
@@ -200,7 +203,11 @@ The skill entry point is [skills/orchestration/SKILL.md](skills/orchestration/SK
 | `skills/orchestration/references/runtime-modes.md` | Runtime mode selection and capability detection |
 | `skills/orchestration/references/bootstrap-flow.md` | Bootstrap flow reference |
 | `skills/orchestration/references/troubleshooting.md` | Common issues and remediation |
-| `dist/orchestration-skill.zip` | Claude upload artifact (generated only, not checked in) |
+| `install.sh` | Install runtime files into a target repo |
+| `Makefile` | Dev targets: install, dist, dist-skill, test, clean |
+| `.gitattributes` | Excludes dev-only files from `git archive` |
+| `dist/orchestration.tar.gz` | Runtime-only tarball (generated, not checked in) |
+| `dist/orchestration-skill.zip` | Claude upload artifact (generated, not checked in) |
 | `scripts/orchestrate-loop.sh` | Autonomous code task loop (tmux mode) |
 | `scripts/orchestrate-doc.sh` | Document draft/review/implement dispatch (tmux mode) |
 | `scripts/dispatch.sh` | Single-task dispatch helper |
