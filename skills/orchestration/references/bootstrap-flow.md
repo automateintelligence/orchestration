@@ -14,34 +14,36 @@ Bootstrap runs when orchestration is absent or partially installed in the target
    - `tasks.md` with pending items
    - `.claude/orchestration/` directory
 
-2. **Classify state**: Absent → fully install. Partial → warn and reconcile. Already installed → exit bootstrap, route to operate flow.
+2. **Classify state**: Absent → fully install. Partial → warn and reconcile. Already installed → proceed to step 3.
 
-3. **Check capabilities**:
+3. **If already installed** → exit bootstrap, route to operate flow.
+
+4. **Check capabilities**:
    - Is `git` present? (required)
    - Does the host support native subagent delegation? (primary runtime)
    - Is `tmux` available? (optional compatibility mode)
 
-4. **Recommend install path**:
+5. **Recommend install path**:
    - **Canonical**: vendored copy of orchestration suite in `.claude/orchestration/` (see `install-paths.md`)
    - **Convenience**: prompt-driven configuration in this session (still produces the same files)
 
-5. **Gather project context** via question groups A-D (see `bootstrap-prompt.md` Step 1 for full catalog):
+6. **Gather project context** via question groups A-D (see `bootstrap-prompt.md` Step 1 for full catalog):
    - A: Project identity (name, root, git remote, branch)
    - B: Specifications (spec directory, tasks.md location, plan file)
    - C: Tech stack and quality (languages, test/lint commands, bootstrap reads)
    - D: Execution mode (vendored vs standalone, multi-session vs single-session, polling defaults)
 
-6. **Recommend runtime mode** based on capabilities (see `runtime-modes.md`):
+7. **Recommend runtime mode** based on capabilities (see `runtime-modes.md`):
    - Native subagents (primary: Claude built-in agent, Codex native delegation)
    - tmux multi-session (optional: shell-based orchestration with separate panes)
 
-7. **Generate artifacts** (see `bootstrap-prompt.md` Step 2):
+8. **Generate artifacts** (see `bootstrap-prompt.md` Step 2):
    - `orchestration-state.env` with project-specific values
    - Agent bootstrap context block (ready-to-paste for first session)
    - Launch command or next-step guidance
    - Quick reference card for monitoring
 
-8. **Run validation checklist** (see `bootstrap-prompt.md` Step 3):
+9. **Run validation checklist** (see `bootstrap-prompt.md` Step 3):
    - tasks.md exists with `- [ ]` formatted items
    - plan.md exists and is referenced correctly
    - Test and lint commands run successfully
@@ -49,9 +51,9 @@ Bootstrap runs when orchestration is absent or partially installed in the target
    - `.claude/orchestration/` scripts are present
    - Bootstrap reads files all exist
 
-9. **Present expected file layout** showing where scripts, specs, and state files should live relative to the project root.
+10. **Present expected file layout** showing where scripts, specs, and state files should live relative to the project root.
 
-10. **Provide next-step commands** — either a tmux session launch or a native subagent execution plan with specific task numbers to start.
+11. **Provide next-step commands** — either a tmux session launch or a native subagent execution plan with specific task numbers to start.
 
 ## Error Exits
 
