@@ -6,8 +6,6 @@ The orchestrator supports three execution models. Choose based on your platform 
 
 The orchestrator dispatches bounded subtasks using the host platform's built-in agent/subagent capabilities (Claude agent execution or Codex native subagents). No external process management required. Recommended for most users.
 
-**Reference:** Section 12 of `orchestration-protocol.md`.
-
 ## Compatibility Mode: tmux Multi-Session
 
 The orchestrator launches separate CLI processes in tmux panes/windows. Uses `orchestrate-loop.sh` for code tasks and `orchestrate-doc.sh` for document tasks. Polls for completion via `.exit` files. Process-level isolation with configurable polling (30s code, 15s docs).
@@ -31,7 +29,7 @@ During bootstrap, detect or ask:
 1. **Is `git` available?** (Required for all modes.)
 2. **Does the host support native subagent dispatch?** (Claude/Codex: yes)
 3. **Is `tmux` available?** (Enables compatibility mode)
-4. **Is CLI installed?** (Enables tmux multi-session mode)
+4. **Is Codex CLI installed?** (Enables tmux multi-session mode)
 
 ## Selection Logic
 
