@@ -7,6 +7,9 @@
 #
 # This is a meta-prompt — it produces project-specific orchestration config.
 # ========================================================================
+# NOTE: The /orchestration skill runs this bootstrap flow automatically with
+# auto-detection and inline questions. Use this file directly only if the skill
+# is unavailable. See skills/orchestration/SKILL.md for the skill-driven flow.
 
 You are setting up the multi-agent orchestration protocol for a new project.
 
