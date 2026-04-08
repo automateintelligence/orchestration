@@ -2,24 +2,30 @@
 
 A cross-platform orchestration skill for multi-agent development workflows. Drop it into any repository to get autonomous implement → review → iterate cycles driven by a `tasks.md` file. Designed for developers using Claude or Codex for coordinated development; the runtime dispatches bounded subtasks to subagents, tracks progress via git, and manages the full review-fix cycle without manual intervention.
 
-## Getting Started: Bootstrap
+## Getting Started
 
-The fastest way to configure orchestration for a new project is to paste `bootstrap-prompt.md` into a Claude or Codex session:
+**With the orchestration skill** (recommended):
+
+- `/orchestration` — detects your repo, installs runtime files if needed, runs bootstrap inline, generates all config
+- `/orchestration:install` — install runtime files only, configure later
+- `/orchestration:init` — configure an existing install (files already present)
+
+**Without the skill** (manual fallback):
+
+Paste `bootstrap-prompt.md` into a Claude or Codex session:
 
 ```bash
-# Print the prompt, then paste it into a new Claude or Codex session
+# Print the prompt, then paste it into a new session
 cat ~/.claude/orchestration/bootstrap-prompt.md
 ```
 
-Or invoke it directly:
+Or invoke directly:
 
 ```bash
 claude -p "$(cat ~/.claude/orchestration/bootstrap-prompt.md)
 
 My project: [describe your project here]"
 ```
-
-Claude will ask targeted questions about your project structure, runtime preferences, and toolchain, then generate all configuration artifacts: state file, agent bootstrap block, launch command, and monitoring reference.
 
 See [bootstrap-prompt.md](bootstrap-prompt.md) for the full template.
 
