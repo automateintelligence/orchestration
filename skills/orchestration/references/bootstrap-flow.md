@@ -1,6 +1,6 @@
 # Bootstrap Decision Tree
 
-Maps the bootstrap workflow. The executable prompt lives at `bootstrap-prompt.md` in the repository root.
+Maps the bootstrap workflow. The `/orchestration` skill executes this flow automatically. For manual setup without the skill, see `bootstrap-prompt.md` in the repository root.
 
 ## Entry Conditions
 
@@ -24,10 +24,10 @@ Bootstrap runs when orchestration is absent or partially installed in the target
    - Is `tmux` available? (optional compatibility mode)
 
 5. **Recommend install path**:
-   - **Canonical**: vendored copy of orchestration suite in `.claude/orchestration/` (see `install-paths.md`)
+   - **Canonical**: The skill runs `install.sh` directly. For manual install without the skill, use `install.sh` from the source repo (see `install-paths.md`).
    - **Convenience**: prompt-driven configuration in this session (still produces the same files)
 
-6. **Gather project context** via question groups A-D (see `bootstrap-prompt.md` Step 1 for full catalog):
+6. **Gather project context** via question groups A-D (see `bootstrap-prompt.md` Step 1 for full catalog). The skill auto-detects project root, git remote, branch, and language before asking. It only prompts for values it cannot detect.
    - A: Project identity (name, root, git remote, branch)
    - B: Specifications (spec directory, tasks.md location, plan file)
    - C: Tech stack and quality (languages, test/lint commands, bootstrap reads)
@@ -69,7 +69,7 @@ Bootstrap stops clearly in these cases:
 
 ## Canonical Reference
 
-For the full question catalog, artifact templates, validation checklist, and prompt engineering principles, see `bootstrap-prompt.md` in the repository root.
+The skill reads `bootstrap-prompt.md` for the full question catalog, artifact templates, and validation checklist. Users without the skill can paste `bootstrap-prompt.md` directly into a session as a fallback.
 
 See also:
 - `install-paths.md` — Installation options (vendored vs standalone, directory layouts)
