@@ -80,33 +80,23 @@ Use when: running inside Claude Code with multi-session overhead not justified, 
 
 See [skills/orchestration/references/runtime-modes.md](skills/orchestration/references/runtime-modes.md) for capability detection and selection logic.
 
-## Quick Start
+## Works With
 
-### Native Subagent Mode (primary)
+The orchestration runtime processes `tasks.md` files regardless of which planning framework produced them:
 
-Invoke the orchestration skill directly from Claude Code:
+- **SpecKit** (`/speckit` family) — for large sprints, new features with complex pieces, greenfield development. Produces `specs/<feature>/` with spec.md, plan.md, tasks.md, and supporting artifacts.
+- **SuperPowers** (`/superpowers` family) — for individual features, bugfixes, and refinements. Produces plans with checkbox-style tasks.
 
-```
-/sc:task Implement all tasks in specs/my-feature/tasks.md on branch my-feature-branch
-```
+Both produce a `tasks.md` that `orchestrate-loop.sh` (Section 10) iterates through. The skill detects the plan format automatically during `/orchestration:init`.
 
-Or use the Task tool directly:
+For document drafting workflows (producing specs, landing page copy, design docs), see `orchestrate-doc.sh` (Section 11 of the protocol).
 
-```
-Use the orchestration protocol to implement tasks in specs/my-feature/tasks.md.
-Branch: my-feature-branch
-Specs: specs/my-feature
-```
+## Manual Operation (without the skill)
 
-### tmux Multi-Session Mode
+If you bypass the skill and run the scripts directly:
 
 ```bash
-# Basic run
-tmux new-session -s orchestrator \
-  '.claude/orchestration/scripts/orchestrate-loop.sh specs/my-feature/tasks.md my-feature-branch \
-   --specs specs/my-feature --env ~/.secrets/my-project.env'
-
-# With verification
+# tmux multi-session mode
 tmux new-session -s orchestrator \
   '.claude/orchestration/scripts/orchestrate-loop.sh specs/my-feature/tasks.md my-feature-branch \
    --specs specs/my-feature \
@@ -116,15 +106,7 @@ tmux new-session -s orchestrator \
    --git-remote github'
 ```
 
-### Single-Session Fallback
-
-Use the TodoWrite-based pattern from Section 12 of the protocol:
-
-```
-Implement the tasks in specs/my-feature/tasks.md.
-For each task: use the Task tool to dispatch to a subagent.
-Validate after each task before proceeding.
-```
+See [orchestration-protocol.md](orchestration-protocol.md) Section 10 for the full command reference.
 
 ## Configuration
 
