@@ -1,6 +1,6 @@
 # Orchestration Protocol Suite
 
-A cross-platform orchestration skill for multi-agent development workflows. Drop it into any repository to get autonomous implement → review → iterate cycles driven by a `tasks.md` file. Designed for developers using Claude or Codex for coordinated development; the runtime dispatches bounded subtasks to subagents, tracks progress via git, and manages the full review-fix cycle without manual intervention.
+A cross-platform orchestration skill for multi-agent development workflows. Drop it into any repository to get autonomous implement → review → iterate cycles driven by a `tasks.md` file, whether that work was planned through SpecKit or SuperPowers. Designed for developers using Claude or Codex for coordinated development; the runtime dispatches bounded subtasks to subagents, tracks progress via git, and manages the full review-fix cycle without manual intervention.
 
 ## Getting Started
 
