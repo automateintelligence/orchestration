@@ -67,25 +67,24 @@ Route based on results:
 
 ### Step 2 — Install
 
-Locate the source repo:
+Ask the user: "Where is the orchestration source repo? (e.g., `~/code/orchestration`,
+or a git URL to clone from)"
+
+If the user provides a local path, verify it contains `install.sh`:
 
 ```bash
-for SRC in "$HOME/.claude/orchestration" "$(git rev-parse --show-toplevel 2>/dev/null)/.claude/orchestration"; do
-  [ -f "$SRC/install.sh" ] && break
-  SRC=""
-done
+[ -f "$SRC/install.sh" ] && echo "SOURCE_OK" || echo "NO_INSTALL_SCRIPT"
 ```
 
-If `$SRC` is empty, ask: "Where is the orchestration source repo?"
+If `NO_INSTALL_SCRIPT`, fall back to copying files individually per the manifest in
+`references/install-paths.md` (mkdir + cp each file).
 
-Run the installer:
+Run the installer from the target repository root:
 
 ```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 "$SRC/install.sh" .claude/orchestration
 ```
-
-If `install.sh` is not present at `$SRC`, fall back to copying files individually
-per the manifest in `references/install-paths.md` (mkdir + cp each file).
 
 Verify the directory layout matches `references/install-paths.md`. If any file is
 missing, list what is absent and stop.
@@ -133,7 +132,7 @@ artifact templates. Execute the bootstrap inline:
 git rev-parse --show-toplevel 2>/dev/null
 git remote get-url github 2>/dev/null || git remote get-url origin 2>/dev/null
 git branch --show-current 2>/dev/null
-ls package.json Gemfile requirements.txt pyproject.toml go.mod Cargo.toml 2>/dev/null
+for f in package.json Gemfile requirements.txt pyproject.toml go.mod Cargo.toml; do [ -f "$f" ] && echo "$f"; done
 ```
 
 **4b. Ask only what cannot be detected.** Present auto-detected values for
@@ -142,12 +141,12 @@ skipping already-answered items.
 
 **4c. Generate artifacts** per `bootstrap-prompt.md` Step 2 templates:
 
-- Write `orchestration-state.env` directly to the project root.
+- Write `.claude/orchestration-state.env` (canonical path, co-located with scripts).
 - Generate the agent bootstrap context block (include in output).
 - Generate the launch command for the recommended runtime mode.
 - Generate the quick reference card.
 
-**4d. Run validation checklist automatically** (the 7-point checklist from
+**4d. Run validation checklist automatically** (the checklist from
 `bootstrap-prompt.md` Step 3). Report pass/fail for each item.
 
 **4e. Show:** file layout, generated state file contents, and exact next command.
