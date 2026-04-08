@@ -1,8 +1,12 @@
 ---
 skill: orchestration
-description: Configure, launch, and operate multi-agent task orchestration in a repository.
+description: Install, configure, and operate multi-agent task orchestration in a repository.
+entry_points:
+  - orchestration
+  - orchestration:install
+  - orchestration:init
 triggers:
-  - new repo setup needing orchestration installed
+  - new repo setup needing orchestration
   - existing orchestration needing validation or troubleshooting
   - guidance on launching or resuming an orchestration run
 ---
@@ -17,41 +21,148 @@ incomplete bootstrap). Use this path to generate all launch artifacts from scrat
 `tasks.md` ready. Use this path to validate the install, launch or resume a run,
 or diagnose a stalled or failed orchestration session.
 
+**Installing only**: The user wants to copy runtime files into the target repository
+without running the full bootstrap. Use `/orchestration:install` for this.
+
+---
+
+## Entry Points
+
+1. **`/orchestration`** — Full auto. Detect → install if needed → bootstrap if
+   unconfigured → operate if ready.
+2. **`/orchestration:install`** — Install runtime files only. Stop after install;
+   do not bootstrap.
+3. **`/orchestration:init`** — Bootstrap only. Requires runtime files already
+   installed. Error if not: "Orchestration files not found. Run
+   `/orchestration:install` first."
+
 ---
 
 ## Decision Order
 
-Follow this sequence on every invocation:
+### Step 1 — Detect
 
-1. **Detect** — Determine whether orchestration is absent, partial, or fully
-   installed in the target repository. Look for `orchestration-state.env` (or
-   `.claude/orchestration-state.env`), `scripts/orchestrate-loop.sh`, and a
-   `tasks.md` with pending `[ ]` items.
+Run these commands:
 
-2. **Capabilities** — Check for required and optional tooling:
-   - Required: `git` (must be present)
-   - Native subagents: determine whether the host runtime supports bounded
-     subtask delegation without external processes (Claude built-in agent
-     execution; Codex native subagents or equivalent)
-   - Optional: `tmux` (enables multi-session mode with separate CLI processes)
+```bash
+# Check vendored install
+ls .claude/orchestration/scripts/orchestrate-loop.sh 2>/dev/null && echo "INSTALLED" || echo "NOT_INSTALLED"
+# Check for state file
+ls .claude/orchestration-state.env orchestration-state.env 2>/dev/null && echo "HAS_STATE" || echo "NO_STATE"
+# Check for tasks file
+find . -name "tasks.md" -path "*/specs/*" 2>/dev/null | head -1
+```
 
-3. **Route** — Based on detection:
-   - Absent or partial → follow the bootstrap flow (`references/bootstrap-flow.md`)
-   - Fully installed → follow the operate flow (validate, launch, or resume)
+Route based on results:
 
-4. **Runtime** — Recommend the appropriate execution model:
-   - **Native subagents** (primary): use when the host supports bounded subtask
-     delegation (Claude Task tool, Codex native subagents). No tmux required.
-     This is the default recommendation.
-   - **tmux compatibility mode**: offer when the user prefers multi-session pane
-     orchestration, when Codex CLI is the intended implementer, or when native
-     subagents are unavailable. Requires `tmux` and the CLI tools.
-   - **Single-session**: use when running interactively in Claude Code without
-     native subagent delegation. The orchestrator acts as implementer using the
-     Task tool for context isolation.
+- `NOT_INSTALLED` → Step 2 (install)
+- `INSTALLED` + `NO_STATE` → Step 3 (bootstrap)
+- `INSTALLED` + `HAS_STATE` → Step 5 (operate)
+- Entry point `/orchestration:install` → go to Step 2, stop after install
+- Entry point `/orchestration:init` → verify `INSTALLED` first; if `NOT_INSTALLED`,
+  stop with error: "Orchestration files not found. Run `/orchestration:install`
+  first." Otherwise go to Step 3.
 
-5. **Output** — Produce artifacts and next-step commands matching the detected
-   state (see Outputs section below).
+---
+
+### Step 2 — Install
+
+Locate the source repo:
+
+```bash
+for SRC in "$HOME/.claude/orchestration" "$(git rev-parse --show-toplevel 2>/dev/null)/.claude/orchestration"; do
+  [ -f "$SRC/install.sh" ] && break
+  SRC=""
+done
+```
+
+If `$SRC` is empty, ask: "Where is the orchestration source repo?"
+
+Run the installer:
+
+```bash
+"$SRC/install.sh" .claude/orchestration
+```
+
+If `install.sh` is not present at `$SRC`, fall back to copying files individually
+per the manifest in `references/install-paths.md` (mkdir + cp each file).
+
+Verify the directory layout matches `references/install-paths.md`. If any file is
+missing, list what is absent and stop.
+
+If entry point is `/orchestration:install`, stop here and show:
+"Installed. Run `/orchestration:init` to configure, or paste
+`.claude/orchestration/bootstrap-prompt.md` into a session."
+
+Otherwise continue to Step 3.
+
+---
+
+### Step 3 — Bootstrap: Capability Detection
+
+Run automatically — do not ask the user:
+
+```bash
+git rev-parse --git-dir 2>/dev/null && echo "GIT: yes" || echo "GIT: no"
+command -v tmux >/dev/null 2>&1 && echo "TMUX: yes" || echo "TMUX: no"
+command -v codex >/dev/null 2>&1 && echo "CODEX: yes" || echo "CODEX: no"
+command -v claude >/dev/null 2>&1 && echo "CLAUDE_CLI: yes" || echo "CLAUDE_CLI: no"
+```
+
+Native subagent support is a self-check, not a Bash check: if you (the AI reading
+this) can dispatch subagents via Task tool or Agent tool, native subagent support
+is available.
+
+Pre-fill the runtime recommendation based on detected capabilities. Do not ask the
+user to choose — recommend a mode and let them override:
+
+- Native subagents available → recommend native subagent mode
+- No native subagents + TMUX + (CODEX or CLAUDE_CLI) → recommend tmux mode
+- Otherwise → recommend single-session mode
+
+---
+
+### Step 4 — Bootstrap: Context Gathering and Artifact Generation
+
+Read `.claude/orchestration/bootstrap-prompt.md` for the full question catalog and
+artifact templates. Execute the bootstrap inline:
+
+**4a. Auto-detect before asking:**
+
+```bash
+git rev-parse --show-toplevel 2>/dev/null
+git remote get-url github 2>/dev/null || git remote get-url origin 2>/dev/null
+git branch --show-current 2>/dev/null
+ls package.json Gemfile requirements.txt pyproject.toml go.mod Cargo.toml 2>/dev/null
+```
+
+**4b. Ask only what cannot be detected.** Present auto-detected values for
+confirmation. Group remaining questions per `bootstrap-prompt.md` Groups A–D,
+skipping already-answered items.
+
+**4c. Generate artifacts** per `bootstrap-prompt.md` Step 2 templates:
+
+- Write `orchestration-state.env` directly to the project root.
+- Generate the agent bootstrap context block (include in output).
+- Generate the launch command for the recommended runtime mode.
+- Generate the quick reference card.
+
+**4d. Run validation checklist automatically** (the 7-point checklist from
+`bootstrap-prompt.md` Step 3). Report pass/fail for each item.
+
+**4e. Show:** file layout, generated state file contents, and exact next command.
+
+---
+
+### Step 5 — Operate
+
+When orchestration is installed and `orchestration-state.env` is present:
+
+1. Validate: confirm scripts are present, state file is readable, and `tasks.md`
+   exists with at least one `- [ ]` item.
+2. Show status: count of pending and completed tasks, current branch.
+3. Present the launch or resume command for the configured runtime mode.
+4. Point to `references/troubleshooting.md` for any issues.
 
 ---
 
