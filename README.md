@@ -2,33 +2,6 @@
 
 A cross-platform orchestration skill for multi-agent development workflows. Drop it into any repository to get autonomous implement → review → iterate cycles driven by a `tasks.md` file, whether that work was planned through SpecKit or SuperPowers. Designed for developers using Claude or Codex for coordinated development; the runtime dispatches bounded subtasks to subagents, tracks progress via git, and manages the full review-fix cycle without manual intervention.
 
-## Getting Started
-
-**With the orchestration skill** (recommended):
-
-- `/orchestration` — detects your repo, installs runtime files if needed, runs bootstrap inline, generates all config
-- `/orchestration:install` — install runtime files only, configure later
-- `/orchestration:init` — configure an existing install (files already present)
-
-**Without the skill** (manual fallback):
-
-Paste `bootstrap-prompt.md` into a Claude or Codex session:
-
-```bash
-# Print the prompt, then paste it into a new session
-cat ~/.claude/orchestration/bootstrap-prompt.md
-```
-
-Or invoke directly:
-
-```bash
-claude -p "$(cat ~/.claude/orchestration/bootstrap-prompt.md)
-
-My project: [describe your project here]"
-```
-
-See [bootstrap-prompt.md](bootstrap-prompt.md) for the full template.
-
 ## Installation
 
 ### Canonical: Vendored Copy (recommended)
@@ -55,6 +28,33 @@ The runtime treats the consuming repository root as the project root. State file
 Use `bootstrap-prompt.md` to generate the installation steps for your specific setup. The bootstrap prompt will produce a ready-to-run install command based on your answers.
 
 See [skills/orchestration/references/install-paths.md](skills/orchestration/references/install-paths.md) for the full expected file layout and path resolution rules.
+
+## Getting Started
+
+**With the orchestration skill** (recommended):
+
+- `/orchestration` — detects your repo, installs runtime files if needed, runs bootstrap inline, generates all config
+- `/orchestration:install` — install runtime files only, configure later
+- `/orchestration:init` — configure an existing install (files already present)
+
+**Without the skill** (manual fallback):
+
+Paste `bootstrap-prompt.md` into a Claude or Codex session:
+
+```bash
+# Print the prompt, then paste it into a new session
+cat ~/.claude/orchestration/bootstrap-prompt.md
+```
+
+Or invoke directly:
+
+```bash
+claude -p "$(cat ~/.claude/orchestration/bootstrap-prompt.md)
+
+My project: [describe your project here]"
+```
+
+See [bootstrap-prompt.md](bootstrap-prompt.md) for the full template.
 
 ## Runtime Modes
 
