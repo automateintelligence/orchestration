@@ -4,9 +4,9 @@ A cross-platform orchestration skill for multi-agent development workflows. Drop
 
 ## Installation
 
-### Canonical: Vendored Copy (recommended)
+### Github Clone (recommended)
 
-Clone and run the install script:
+Clone and run the install script.  This installation script also registers the `/orchestration` skill in Claude and Codex.
 
 ```bash
 git clone https://github.com/automateintelligence/orchestration /tmp/orch
@@ -16,9 +16,13 @@ rm -rf /tmp/orch
 
 Or download a release tarball (runtime files only, no dev artifacts):
 
+Github - Download ZIP `orchestration-main.zip`
+Save to `/tmp` in your project folder.  Extract to `/tmp/orchestration/`
+
 ```bash
-# From GitHub Releases or: make dist (in a local checkout)
-tar xzf orchestration.tar.gz -C .claude/orchestration --strip-components=1
+/tmp/orch/install.sh .claude/orchestration
+rm -rf /tmp/orch
+rm /tmp/orchestration-main.zip
 ```
 
 The runtime treats the consuming repository root as the project root. State files live at `.claude/orchestration-state.env`.

@@ -94,12 +94,34 @@ test_vendored_dispatch_target() {
     assert_contains "$(cat "$REPO_ROOT/makefile-targets.mk")" '.claude/orchestration/scripts/dispatch.sh' "makefile should point to vendored dispatch path"
 }
 
+test_install_registers_project_skills() {
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    trap 'rm -rf "$tmpdir"' RETURN
+
+    mkdir -p "$tmpdir/project"
+    (
+        cd "$tmpdir/project"
+        "$REPO_ROOT/install.sh" .claude/orchestration >/dev/null
+    )
+
+    [[ -f "$tmpdir/project/.claude/commands/orchestration.md" ]] || fail "install.sh should register the Claude Code /orchestration command"
+    [[ -f "$tmpdir/project/.codex/skills/orchestration/SKILL.md" ]] || fail "install.sh should register the Codex orchestration skill"
+    [[ -f "$tmpdir/project/.codex/skills/orchestration/references/install-paths.md" ]] || fail "Codex orchestration skill should include its references"
+
+    assert_contains "$(cat "$tmpdir/project/.codex/skills/orchestration/SKILL.md")" "skill: orchestration" "installed Codex skill should expose the orchestration entry point"
+
+    trap - RETURN
+    rm -rf "$tmpdir"
+}
+
 main() {
     test_path_resolution
     test_poll_defaults
     test_parallel_review_gate
     test_hardened_claude_launches
     test_vendored_dispatch_target
+    test_install_registers_project_skills
     echo "runtime regressions: PASS"
 }
 
