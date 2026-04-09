@@ -1,9 +1,11 @@
 # Orchestration Protocol
 
-> **Authority**: This protocol governs multi-agent development orchestration.
-> **Primary Orchestrator**: Claude (via Claude.ai + Desktop Commander WSL access)
-> **Execution Agent (Code Implementation)**: Codex CLI (default implementer)
-> **Review Agent**: Claude Code CLI
+> **Authority**: This protocol governs multi-agent development orchestration and is runtime-agnostic.
+> **Primary Execution Model**: Native subagent orchestration (Claude Code Task tool; see Section 12)
+> **Compatibility Path**: tmux multi-session orchestration (`orchestrate-loop.sh`; see Section 10)
+> **Primary Orchestrator**: Claude (runtime-agnostic; operates as orchestrator in both models)
+> **Execution Agent (Code Implementation)**: Codex CLI (default implementer in tmux model) or Task-tool subagent (native model)
+> **Review Agent**: Claude Code CLI or Task-tool subagent reviewer
 > **Architect**: Project lead -- owns specifications, direction, and final acceptance
 > **Orchestrator Authority**: Claude -- owns execution planning, clarification, dispatch, review cycles, and cross-agent coordination
 
@@ -26,7 +28,8 @@
 - Performs final review after cross-agent review cycles
 - Escalates to project lead per Section 5
 - May create git worktrees for parallel execution
-- **Can run autonomously** via `orchestrate-loop.sh` (see Section 10)
+- **Primary dispatch model**: native subagent orchestration via Task tool (see Section 12)
+- **Compatibility dispatch**: `orchestrate-loop.sh` tmux-based loop (see Section 10)
 
 ### Codex CLI -- Execution Agent
 - Implements plans, writes code, runs tests, commits
@@ -311,9 +314,11 @@ When working on frontend code:
 
 ## 10. Autonomous Orchestration Loop
 
+> **Note**: This section documents the **tmux-based compatibility mode**. For the primary native subagent orchestration model, see **Section 12**.
+
 ### Overview
 
-The orchestration loop (`orchestrate-loop.sh`) is the canonical execution path. It is a persistent bash script that runs inside a tmux session and replaces the manual dispatch workflow by autonomously:
+The orchestration loop (`orchestrate-loop.sh`) is the tmux-based execution path. It is a persistent bash script that runs inside a tmux session and replaces the manual dispatch workflow by autonomously:
 
 1. Parsing `tasks.md` for pending tasks
 2. Dispatching Codex or Claude Code to implement each task
@@ -791,7 +796,7 @@ claude -p \
 ### Integration with Section 10
 
 Sections 10 and 11 are the primary tmux-based execution surfaces:
-- **Section 10** (`orchestrate-loop.sh`): Canonical path for code tasks from `tasks.md`
+- **Section 10** (`orchestrate-loop.sh`): tmux compatibility path for code tasks from `tasks.md`
 - **Section 11** (`orchestrate-doc.sh`): Canonical path for document draft-review-implement cycles
 
 Both use the same tmux dispatch pattern, .exit file polling, and review verdict parsing. The orchestrator can invoke either based on the nature of the work.
@@ -807,29 +812,29 @@ Both use the same tmux dispatch pattern, .exit file polling, and review verdict 
 | Phase orchestration tracker | `{output-dir}/phase-{N}-orchestration-tracker.md` |
 | Phase review artifacts | `{output-dir}/phase-{N}-review-r{round}-{reviewer}.md` |
 
-## 12. Single-Session Fallback
+## 12. Native Subagent Orchestration
 
 ### Overview
 
-Single-session mode is a fallback execution model for when the canonical tmux-based path is unavailable or not worth its overhead. In this mode, the orchestrator runs inside Claude Code's interactive session, acts as the implementer, and uses internal subagents (Task tool) for context isolation and parallelism.
+Native subagent orchestration is the primary execution model. The orchestrator runs inside Claude Code's interactive session and uses internal subagents (Task tool) for context isolation, parallelism, and implementation — without requiring tmux or external CLI processes.
 
 ### When to Use
 
-- No tmux session available
-- No Codex CLI installed
+- Default for all new orchestration work
 - Running inside Claude Code interactive session
-- Quick orchestration where tmux overhead isn't justified
+- Parallel task execution via Task tool
+- When tmux multi-session overhead is not justified (use Section 10 for that case)
 
 ### How It Differs
 
-| Aspect | Multi-Session (Sections 10-11) | Single-Session |
-|--------|-------------------------------|----------------|
-| Dispatch | tmux windows + CLI processes | Task tool subagents |
-| Polling | Configurable `.exit` file checks (`30s` code / `15s` doc defaults) | Task tool returns synchronously |
-| Tracking | Markdown tracker + `orchestration-state.env` | TodoWrite + JSON state file |
+| Aspect | Native Subagent (Primary) | tmux Multi-Session (Compatibility) |
+|--------|--------------------------|-------------------------------------|
+| Dispatch | Task tool subagents | tmux windows + CLI processes |
+| Polling | Task tool returns synchronously | Configurable `.exit` file checks (`30s` code / `15s` doc defaults) |
+| Tracking | TodoWrite + JSON state file | Markdown tracker + `orchestration-state.env` |
 | Verification | Orchestrator runs directly | Same -- orchestrator runs directly |
-| Context isolation | Separate CLI processes | Subagent context boundaries |
-| Parallelism | Multiple tmux windows | Multiple Task tool calls |
+| Context isolation | Subagent context boundaries | Separate CLI processes |
+| Parallelism | Multiple Task tool calls | Multiple tmux windows |
 
 ### Execution Pattern
 
@@ -893,7 +898,7 @@ If verification fails, the orchestrator creates a synthetic review with the fail
 
 ### Git-Based Progress Monitoring (applies to all modes)
 
-Even in single-session mode, git remains the primary progress signal. The orchestrator MUST:
+Even in native subagent mode, git remains the primary progress signal. The orchestrator MUST:
 
 1. **Snapshot HEAD** before dispatching any subagent: `git rev-parse HEAD`
 2. **After subagent returns**: run `git log --oneline {snapshot}..HEAD` to see what the agent committed
@@ -902,7 +907,7 @@ Even in single-session mode, git remains the primary progress signal. The orches
 5. **Audit uncommitted changes**: run `git diff --stat` -- if the agent left uncommitted work, either commit it or discard it before the next step
 6. **Verify commit messages**: check that commit messages follow `<files-changed> -- <description>` format and reference the correct task ID
 
-In single-session mode, the orchestrator can read the actual diff content (not just stat) to confirm implementation quality before dispatching a reviewer. This is faster than a full review cycle and catches obvious problems early.
+In native subagent mode, the orchestrator can read the actual diff content (not just stat) to confirm implementation quality before dispatching a reviewer. This is faster than a full review cycle and catches obvious problems early.
 
 ### Agent Bootstrap
 

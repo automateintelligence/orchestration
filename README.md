@@ -1,48 +1,112 @@
 # Orchestration Protocol Suite
 
-A multi-agent development workflow for coordinating Claude.ai or Claude Code CLI or Codex CLI (orchestrator), Codex CLI (implementer), and Claude Code CLI (reviewer). Drop this into any repo to get autonomous implement -> review -> iterate for multiple cycles; driven by a tasks.md file.
+A cross-platform orchestration skill for multi-agent development workflows. Drop it into any repository to get autonomous implement → review → iterate cycles driven by a `tasks.md` file. Designed for developers using Claude or Codex for coordinated development; the runtime dispatches bounded subtasks to subagents, tracks progress via git, and manages the full review-fix cycle without manual intervention.
 
-The primary installation model is a vendored copy at `.claude/orchestration/` inside the consuming repository, and the primary execution model is the multi-session tmux workflow. Standalone checkout and single-session execution remain supported fallback modes for developing or debugging the suite itself.
+## Getting Started
 
-## Quick Start
+**With the orchestration skill** (recommended):
 
-1. **Copy the suite into your project's `.claude/orchestration/` directory:**
-   ```bash
-   cp -r ~/.claude/orchestration/ .claude/orchestration/
-   ```
+- `/orchestration` — detects your repo, installs runtime files if needed, runs bootstrap inline, generates all config
+- `/orchestration:install` — install runtime files only, configure later
+- `/orchestration:init` — configure an existing install (files already present)
 
-2. **Set environment variables** (or pass via CLI flags):
-   ```bash
-   export ORCH_SPECS="specs/my-feature"        # Path to your spec directory
-   export GIT_REMOTE="github"                  # Git remote name (default: github)
-   ```
+**Without the skill** (manual fallback):
 
-3. **Include Makefile targets** (optional):
-   ```makefile
-   # In your root Makefile
-   PLAN   ?= specs/my-feature/plan.md
-   BRANCH ?= my-feature-branch
-   SPECS  ?= specs/my-feature
-   include .claude/orchestration/makefile-targets.mk
-   ```
+Paste `bootstrap-prompt.md` into a Claude or Codex session:
 
-4. **Run the orchestration loop:**
-   ```bash
-   tmux new-session -s orchestrator \
-     '.claude/orchestration/scripts/orchestrate-loop.sh specs/my-feature/tasks.md my-feature-branch \
-      --specs specs/my-feature --env ~/.secrets/my-project.env'
-   ```
+```bash
+# Print the prompt, then paste it into a new session
+cat ~/.claude/orchestration/bootstrap-prompt.md
+```
 
-5. **Run with verification:**
-   ```bash
-   tmux new-session -s orchestrator \
-     '.claude/orchestration/scripts/orchestrate-loop.sh specs/my-feature/tasks.md my-feature-branch \
-      --specs specs/my-feature \
-      --test-cmd "pytest tests/ -x -q" \
-      --lint-cmd "ruff check ." \
-      --bootstrap-reads ".claude/CLAUDE.md,specs/my-feature/spec.md" \
-      --git-remote github'
-   ```
+Or invoke directly:
+
+```bash
+claude -p "$(cat ~/.claude/orchestration/bootstrap-prompt.md)
+
+My project: [describe your project here]"
+```
+
+See [bootstrap-prompt.md](bootstrap-prompt.md) for the full template.
+
+## Installation
+
+### Canonical: Vendored Copy (recommended)
+
+Clone and run the install script:
+
+```bash
+git clone https://github.com/automateintelligence/orchestration /tmp/orch
+/tmp/orch/install.sh .claude/orchestration
+rm -rf /tmp/orch
+```
+
+Or download a release tarball (runtime files only, no dev artifacts):
+
+```bash
+# From GitHub Releases or: make dist (in a local checkout)
+tar xzf orchestration.tar.gz -C .claude/orchestration --strip-components=1
+```
+
+The runtime treats the consuming repository root as the project root. State files live at `.claude/orchestration-state.env`.
+
+### Convenience: Prompt-Driven
+
+Use `bootstrap-prompt.md` to generate the installation steps for your specific setup. The bootstrap prompt will produce a ready-to-run install command based on your answers.
+
+See [skills/orchestration/references/install-paths.md](skills/orchestration/references/install-paths.md) for the full expected file layout and path resolution rules.
+
+## Runtime Modes
+
+Three execution models are supported. Choose based on your platform.
+
+### Primary: Native Subagent Orchestration
+
+The orchestrator dispatches bounded subtasks using the host platform's built-in agent/subagent capabilities (Claude agent execution or Codex native subagents). No external process management required. **Recommended for most users.**
+
+Use when: running inside Claude Code or Codex with native subagent support.
+
+### Compatibility: tmux Multi-Session
+
+The orchestrator launches separate CLI processes in tmux panes/windows, using `scripts/orchestrate-loop.sh` for code tasks and `scripts/orchestrate-doc.sh` for document tasks. Polls for completion via `.exit` files.
+
+Use when: Codex is the implementer, pane-based monitoring is preferred, or native subagents are unavailable.
+
+### Single-Session Fallback
+
+The orchestrator runs inside an interactive Claude Code session using the Task tool for context isolation. No tmux or polling overhead.
+
+Use when: running inside Claude Code with multi-session overhead not justified, or tmux unavailable.
+
+See [skills/orchestration/references/runtime-modes.md](skills/orchestration/references/runtime-modes.md) for capability detection and selection logic.
+
+## Works With
+
+The orchestration runtime processes `tasks.md` files regardless of which planning framework produced them:
+
+- **SpecKit** (`/speckit` family) — for large sprints, new features with complex pieces, greenfield development. Produces `specs/<feature>/` with spec.md, plan.md, tasks.md, and supporting artifacts.
+- **SuperPowers** (`/superpowers` family) — for individual features, bugfixes, and refinements. Produces plans with checkbox-style tasks.
+
+Both produce a `tasks.md` that `orchestrate-loop.sh` (Section 10) iterates through. The skill detects the plan format automatically during `/orchestration:init`.
+
+For document drafting workflows (producing specs, landing page copy, design docs), see `orchestrate-doc.sh` (Section 11 of the protocol).
+
+## Manual Operation (without the skill)
+
+If you bypass the skill and run the scripts directly:
+
+```bash
+# tmux multi-session mode
+tmux new-session -s orchestrator \
+  '.claude/orchestration/scripts/orchestrate-loop.sh specs/my-feature/tasks.md my-feature-branch \
+   --specs specs/my-feature \
+   --test-cmd "pytest tests/ -x -q" \
+   --lint-cmd "ruff check ." \
+   --bootstrap-reads ".claude/CLAUDE.md,specs/my-feature/spec.md" \
+   --git-remote github'
+```
+
+See [orchestration-protocol.md](orchestration-protocol.md) Section 10 for the full command reference.
 
 ## Configuration
 
@@ -50,27 +114,15 @@ The primary installation model is a vendored copy at `.claude/orchestration/` in
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `ORCH_SPECS` | `specs` | Default specs directory (used when `--specs` not passed) |
-| `GIT_REMOTE` | `github` | Git remote name shown in prompts and review context |
-| `CODEX_MODEL` | *(none)* | Model override for Codex CLI (e.g., `o3`) |
+| `ORCH_SPECS` | `specs` | Default specs directory |
+| `GIT_REMOTE` | `github` | Git remote name |
+| `CODEX_MODEL` | *(none)* | Model override for Codex CLI |
 | `CLAUDE_MODEL` | *(none)* | Model override for Claude Code CLI |
-| `ORCH_POLL_INTERVAL` | `30` code / `15` doc | Shared poll interval override for tmux-based execution modes |
-| `ORCH_CODE_POLL_INTERVAL` | inherits shared or `30` | Code-loop poll interval override |
-| `ORCH_DOC_POLL_INTERVAL` | inherits shared or `15` | Document-loop poll interval override |
-| `ORCH_PARALLEL_GROUP_HOOK` | *(none)* | Optional command that can block an unsafe `[P]` batch and force sequential fallback |
-| `ORCH_EXPECTED_DIRS` | *(see below)* | Pipe-separated regex for expected file paths (drift detection) |
-
-`ORCH_EXPECTED_DIRS` defaults to `src/|tests/|specs/|planning/|docs/|\.claude/|deploy/|tools/|Makefile` and controls which file paths are considered "expected" during git drift detection. Set this to match your project's directory structure.
-
-When `ORCH_PARALLEL_GROUP_HOOK` is set, the code loop exports `ORCH_PARALLEL_TASK_IDS`, `ORCH_PARALLEL_TASK_PHASES`, `ORCH_PARALLEL_TASK_DESCRIPTIONS`, `ORCH_TASKS_FILE`, `ORCH_PROJECT_ROOT`, and `ORCH_BRANCH` before invoking the hook. Exit `0` to allow the batch or non-zero to fall back to sequential execution.
-
-### Makefile Variables
-
-| Variable | Purpose |
-|----------|---------|
-| `PLAN` | Path to plan.md |
-| `BRANCH` | Git branch name |
-| `SPECS` | Specs directory path |
+| `ORCH_POLL_INTERVAL` | `30` code / `15` doc | Shared poll interval override (tmux modes) |
+| `ORCH_CODE_POLL_INTERVAL` | inherits shared or `30` | Code-loop-specific poll interval override |
+| `ORCH_DOC_POLL_INTERVAL` | inherits shared or `15` | Document-loop-specific poll interval override |
+| `ORCH_PARALLEL_GROUP_HOOK` | *(none)* | Optional hook to screen parallel `[P]` batches |
+| `ORCH_EXPECTED_DIRS` | `src/\|tests/\|specs/\|...` | Pipe-separated regex for drift detection |
 
 ### CLI Options (orchestrate-loop.sh)
 
@@ -78,7 +130,7 @@ When `ORCH_PARALLEL_GROUP_HOOK` is set, the code loop exports `ORCH_PARALLEL_TAS
 |--------|---------|-------------|
 | `--specs <path>` | `$ORCH_SPECS` | Specs directory |
 | `--plan <path>` | `<specs>/plan.md` | Plan file |
-| `--poll-interval <sec>` | `30` | Code-loop poll frequency (`orchestrate-doc.sh` defaults to 15s unless overridden by env) |
+| `--poll-interval <sec>` | `30` | Code-loop poll frequency |
 | `--max-iterations <n>` | `3` | Max review-fix cycles |
 | `--timeout <sec>` | `3600` | Max seconds per agent |
 | `--test-cmd <cmd>` | *(none)* | Verification test command |
@@ -87,94 +139,78 @@ When `ORCH_PARALLEL_GROUP_HOOK` is set, the code loop exports `ORCH_PARALLEL_TAS
 | `--git-remote <name>` | `github` | Git remote name |
 | `--phase <n\|name>` | *(all)* | Phase filter |
 | `--tasks <ids>` | *(all)* | Task ID filter |
-| `--from <id>` / `--to <id>` | *(all)* | Task range filter |
+| `--from <task-id>` | *(start)* | Start from this task (inclusive) |
+| `--to <task-id>` | *(end)* | Stop after this task (inclusive) |
 | `--sequential-only` | `false` | Ignore `[P]` markers |
 | `--dry-run` | `false` | Print without executing |
 | `--resume` | `false` | Resume from state file |
 | `--env <path>` | *(none)* | Environment file to source |
 
-## Execution Model
+See [orchestration-protocol.md](orchestration-protocol.md) for the full configuration reference.
 
-The canonical path is the tmux-based multi-session workflow driven by `scripts/orchestrate-loop.sh` and `scripts/orchestrate-doc.sh`.
+## Makefile Integration (optional)
 
-- Primary: vendored `.claude/orchestration/` inside the consuming repository, using tmux windows plus Codex/Claude CLI workers.
-- Fallback: single-session orchestration inside Claude Code when tmux or a required CLI is unavailable.
-- Development mode: a standalone checkout of this repository is supported for editing and testing the suite.
+`makefile-targets.mk` is an optional integration aid for Make-based projects. It provides `orch-*` targets that wrap the shell scripts.
 
-## Installation Layouts
-
-- Vendored-first: copy this suite into `.claude/orchestration/` inside the consuming repository. Runtime path resolution treats the consuming repo root as the project root, and the state file lives at `.claude/orchestration-state.env`.
-- Standalone: when developing the suite repo directly, runtime path resolution treats the suite root as the project root. State files live beside the suite (`orchestration-state.env` for code mode, `orchestration-doc-state.env` for doc mode).
-
-## New Project Setup
-
-Use the bootstrap prompt to configure orchestration for a new project:
-
-```bash
-# Option 1: Paste bootstrap-prompt.md into a new Claude session
-cat ~/.claude/orchestration/bootstrap-prompt.md
-
-# Option 2: Reference it directly
-claude -p "$(cat ~/.claude/orchestration/bootstrap-prompt.md)
-
-My project: [describe your project here]"
+```makefile
+# In your root Makefile
+PLAN   ?= specs/my-feature/plan.md
+BRANCH ?= my-feature-branch
+SPECS  ?= specs/my-feature
+include .claude/orchestration/makefile-targets.mk
 ```
 
-The bootstrap prompt will ask you targeted questions about your project, then generate all the configuration artifacts (state file, agent bootstrap block, launch command, monitoring cheat sheet).
+This is not required. The shell scripts and skill invocation patterns work without it.
 
-See [bootstrap-prompt.md](bootstrap-prompt.md) for the full template.
+## Using as a Skill
+
+The `skills/orchestration/` directory is the canonical skill source.
+
+**Claude:** Zip the directory and upload it as a custom skill in Claude.ai:
+
+```bash
+make dist-skill   # builds dist/orchestration-skill.zip
+```
+
+**Codex:** Use the directory directly as a skill source by pointing Codex at `skills/orchestration/`.
+
+The skill entry point is [skills/orchestration/SKILL.md](skills/orchestration/SKILL.md).
 
 ## File Inventory
 
-| File | Purpose |
-|------|---------|
-| `bootstrap-prompt.md` | Meta-prompt for configuring orchestration on a new project |
-| `orchestration-protocol.md` | Full protocol documentation (Sections 1-12) |
-| `orchestration-state.env.example` | Schema for runtime state (auto-populated) |
+| Path | Role |
+|------|------|
+| `README.md` | Primary public entry point |
+| `bootstrap-prompt.md` | User-facing bootstrap prompt; convenience install path |
+| `orchestration-protocol.md` | Full protocol reference (Sections 1-12) |
 | `orchestrate-doc-prompt-template.md` | Prompt template for document orchestration |
-| `makefile-targets.mk` | Makefile include for `orch-*` targets |
+| `orchestration-state.env.example` | State schema reference |
+| `makefile-targets.mk` | Optional Make targets integration |
+| `skills/orchestration/SKILL.md` | Canonical skill entry point |
+| `skills/orchestration/references/install-paths.md` | File layout and path resolution reference |
+| `skills/orchestration/references/runtime-modes.md` | Runtime mode selection and capability detection |
+| `skills/orchestration/references/bootstrap-flow.md` | Bootstrap flow reference |
+| `skills/orchestration/references/troubleshooting.md` | Common issues and remediation |
+| `install.sh` | Install runtime files into a target repo |
+| `Makefile` | Dev targets: install, dist, dist-skill, test, clean |
+| `.gitattributes` | Excludes dev-only files from `git archive` |
+| `dist/orchestration.tar.gz` | Runtime-only tarball (generated, not checked in) |
+| `dist/orchestration-skill.zip` | Claude upload artifact (generated, not checked in) |
+| `scripts/orchestrate-loop.sh` | Autonomous code task loop (tmux mode) |
+| `scripts/orchestrate-doc.sh` | Document draft/review/implement dispatch (tmux mode) |
 | `scripts/dispatch.sh` | Single-task dispatch helper |
-| `scripts/lib/orch-agent-runtime.sh` | Shared path resolution, polling defaults, hardened Claude launches, and dispatch helpers |
-| `scripts/orchestrate-loop.sh` | Autonomous code task loop |
-| `scripts/orchestrate-doc.sh` | Document draft/review/implement dispatch |
-| `scripts/review-prompt-codex.md` | Code review template (Codex) |
+| `scripts/lib/orch-agent-runtime.sh` | Shared path resolution, polling defaults, dispatch helpers |
 | `scripts/review-prompt-claude.md` | Code review template (Claude Code) |
-| `scripts/review-prompt-doc-codex.md` | Document review template (Codex) |
+| `scripts/review-prompt-codex.md` | Code review template (Codex) |
 | `scripts/review-prompt-doc-claude.md` | Document review template (Claude Code) |
-
-## Key Features
-
-### Git-Based Progress Monitoring
-During polling, the orchestrator tracks agent progress via git commits, spot-checks diffs for scope drift, and audits for uncommitted changes after completion. See Section 4 of the protocol.
-
-### Verification Gate
-After a review PASS, the orchestrator runs test/lint commands directly (not delegated to agents) before marking a task complete. Failures generate synthetic reviews and trigger fix iterations.
-
-### JSON State File
-In addition to `orchestration-state.env`, the loop produces a machine-parseable `.json` state file for programmatic consumption.
-
-### Parallel Conflict Hook
-Parallel `[P]` batches can be screened by a consuming repository before dispatch. Use `ORCH_PARALLEL_GROUP_HOOK` to encode repo-specific conflict boundaries without hardcoding them into the template.
-
-### Single-Session Fallback (Section 12)
-When the canonical tmux workflow is unavailable, the orchestrator can run inside Claude Code's interactive session using Task tool subagents for context isolation.
-
-### Error Recovery
-Agent failures are classified (dependency errors, context overflow, timeout) with diagnostic capture and configurable re-dispatch limits.
+| `scripts/review-prompt-doc-codex.md` | Document review template (Codex) |
+| `tests/runtime-regressions.sh` | Regression baseline for path resolution and runtime behavior |
 
 ## Documentation
 
-See [orchestration-protocol.md](orchestration-protocol.md) for the full protocol including:
-- Command hierarchy and agent roles (Section 1)
-- Dispatch commands (Section 3)
-- Execution cycle with diagrams (Section 4)
-- Git-based progress monitoring (Section 4)
-- Error recovery (Section 4)
-- Escalation rules (Section 5)
-- Review standards and verdict rules (Section 6)
-- Autonomous loop operation (Section 10)
-- Document orchestration mode (Section 11)
-- Single-session fallback (Section 12)
+- [orchestration-protocol.md](orchestration-protocol.md) — Full protocol including agent roles, dispatch commands, execution cycle, git monitoring, error recovery, escalation rules, review standards, autonomous loop, document orchestration, and single-session fallback.
+- [orchestrate-doc-prompt-template.md](orchestrate-doc-prompt-template.md) — Prompt template for orchestrating document drafts and revisions.
+- [skills/orchestration/references/](skills/orchestration/references/) — Skill reference files: install paths, runtime modes, bootstrap flow, and troubleshooting.
 
 ## Contributing
 
