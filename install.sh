@@ -24,5 +24,14 @@ cp "$SCRIPT_DIR"/orchestrate-doc-prompt-template.md "$TARGET/"
 cp "$SCRIPT_DIR"/orchestration-state.env.example   "$TARGET/"
 cp "$SCRIPT_DIR"/makefile-targets.mk               "$TARGET/"
 
+# Register the /orchestration skill as a Claude Code command (project-level)
+PROJECT_ROOT="$(cd "$(dirname "$TARGET")" && pwd)"
+COMMANDS_DIR="$PROJECT_ROOT/.claude/commands"
+if [ -d "$SCRIPT_DIR/skills/orchestration" ]; then
+  mkdir -p "$COMMANDS_DIR"
+  cp "$SCRIPT_DIR"/skills/orchestration/SKILL.md "$COMMANDS_DIR/orchestration.md"
+  echo "Registered /orchestration skill at $COMMANDS_DIR/orchestration.md"
+fi
+
 echo "Installed orchestration suite to $TARGET"
-echo "Next: paste $TARGET/bootstrap-prompt.md into a Claude or Codex session to configure."
+echo "Next: run /orchestration in a Claude Code session to configure."
