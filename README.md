@@ -30,12 +30,6 @@ rm /tmp/orchestration-main.zip
 
 The runtime treats the consuming repository root as the project root. State files live at `.claude/orchestration-state.env`.
 
-### Convenience: Prompt-Driven
-
-Use `bootstrap-prompt.md` to generate the installation steps for your specific setup. The bootstrap prompt will produce a ready-to-run install command based on your answers.
-
-See [skills/orchestration/references/install-paths.md](skills/orchestration/references/install-paths.md) for the full expected file layout and path resolution rules.
-
 ## Getting Started
 
 **With the orchestration skill** (recommended):
@@ -44,15 +38,15 @@ See [skills/orchestration/references/install-paths.md](skills/orchestration/refe
 - `/orchestration:install` — install runtime files only, configure later
 - `/orchestration:init` — configure an existing install (files already present)
 
-**Without the skill** (manual fallback):
+**Without the skill: Prompt-Driven** (manual fallback):
 
-Paste `bootstrap-prompt.md` into a Claude or Codex session:
+Paste `bootstrap-prompt.md` into a Claude or Codex session to generate the installation steps for your specific setup. The bootstrap prompt will produce a ready-to-run install command based on your answers.
+See [skills/orchestration/references/install-paths.md](skills/orchestration/references/install-paths.md) for the full expected file layout and path resolution rules.
 
 ```bash
 # Print the prompt, then paste it into a new session
 cat ~/.claude/orchestration/bootstrap-prompt.md
 ```
-
 Or invoke directly:
 
 ```bash
@@ -60,8 +54,8 @@ claude -p "$(cat ~/.claude/orchestration/bootstrap-prompt.md)
 
 My project: [describe your project here]"
 ```
-
 See [bootstrap-prompt.md](bootstrap-prompt.md) for the full template.
+
 
 ## Runtime Modes
 
