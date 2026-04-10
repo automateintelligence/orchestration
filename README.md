@@ -3,7 +3,7 @@ Put Codex and Claude to work for you - together!  Have them take turns planning,
 
 # Orchestration Protocol Suite
 
-A cross-platform orchestration skill for multi-agent development workflows. Drop it into any repository to get autonomous implement → review → iterate cycles driven by a `tasks.md` file, whether that work was planned through SpecKit or SuperPowers. Designed for developers using Claude or Codex for coordinated development; the runtime dispatches bounded subtasks to subagents, tracks progress via git, and manages the full review-fix cycle without manual intervention.
+A cross-platform orchestration skill for multi-agent development workflows. Drop it into any repository to get autonomous - Plan → Immplement → Review → Iterate N cycles - driven by a `tasks.md` or `plan.md` file, whether that work was planned through SpecKit or SuperPowers or your favorite framework with a structured implementation plan. Designed for developers using Claude or Codex for coordinated development; the runtime dispatches bounded subtasks to subagents, tracks progress via git, and manages the full review-fix cycle without manual intervention.
 
 ## Installation
 
@@ -83,14 +83,14 @@ See [skills/orchestration/references/runtime-modes.md](skills/orchestration/refe
 
 ## Works With
 
-The orchestration runtime processes `tasks.md` files regardless of which planning framework produced them:
+For document drafting workflows (producing specs, landing page copy, design docs), see `orchestrate-doc.sh` (Section 11 of the protocol).
+
+The orchestration runtime processes `tasks.md` or `plan.md` files regardless of which planning framework produced them:
 
 - **SpecKit** (`/speckit` family) — for large sprints, new features with complex pieces, greenfield development. Produces `specs/<feature>/` with spec.md, plan.md, tasks.md, and supporting artifacts.
 - **SuperPowers** (`/superpowers` family) — for individual features, bugfixes, and refinements. Produces plans with checkbox-style tasks.
 
-Both produce a `tasks.md` that `orchestrate-loop.sh` (Section 10) iterates through. The skill detects the plan format automatically during `/orchestration:init`.
-
-For document drafting workflows (producing specs, landing page copy, design docs), see `orchestrate-doc.sh` (Section 11 of the protocol).
+Both produce a `tasks.md` or `plan.md' that `orchestrate-loop.sh` (Section 10) iterates through. The skill detects the plan format automatically during `/orchestration:init`.
 
 ## Manual Operation (without the skill)
 
